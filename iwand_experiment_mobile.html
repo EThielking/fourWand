@@ -377,7 +377,7 @@ function screenWelcome(){
   STATE.screen = "welcome";
   show(`
     <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
-    <h1>Thanks for helping us study natural fluctuations in attention!</h1>
+    <h1>Thanks for helping us pilot this study about our natural fluctuations in attention</h1>
     <p class="dim small">It takes roughly <strong>${esc(estRangeText())}</strong> in total, split into four shorter blocks (you'll pick the length on the next screen). You can take breaks after each block. It runs entirely in this tab, and your responses are sent to the researcher automatically at the end.</p>
     <h2>Before you start</h2>
     <ul class="small">
@@ -449,40 +449,49 @@ function screenOverview(){
   const nC = SESSION.order.length;
   show(`
     <p class="eyebrow">how it works</p>
-    <h1>What you'll do</h1>
-    <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, back to back, each about <strong>${esc(RUN.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
+    <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, each about <strong>${esc(RUN.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
     <p>In every part, soft beeps play at a steady pace. There are two kinds of part:</p>
     <ul>
       <li><strong>Sound tasks</strong> — you respond to a specific beep.</li>
       <li><strong>Breath tasks</strong> — you ignore the beeps and follow your breathing.</li>
     </ul>
     <p>Some parts are done with your <strong>eyes open</strong>, some with your <strong>eyes closed</strong>. Each part begins with its own short reminder of what to do, so you don't need to memorize everything now.</p>
-    <div class="note">Throughout, the beeps will occasionally pause and you'll hear the spoken word <em>"pause"</em> — this is our <strong>experience-sampling probe</strong> (we'll just call it the <em>probe</em>). When you hear it, you'll use the arrow keys to report where your attention was in the moment <strong>just</strong> before the probe. The next screen explains this — it's important you understand it before starting.</div>
+    <div class="note">Throughout, the beeps will occasionally pause and you'll hear the spoken word <em>"pause"</em> — this is our <strong>experience-sampling probe</strong>. When you hear it, you'll use the arrow keys to report where your attention was in the moment <strong>just</strong> before the probe. The next screen explains this — it's important you understand it before starting.</div>
     <div class="row"><button class="btn primary" id="next">Next</button></div>
   `);
   el("next").onclick = screenProbeInstructions;
 }
 function screenProbeInstructions(){
-  STATE.screen = "probeInfo";
-  show(`
-    <p class="eyebrow">the probe</p>
-    <h1>Reporting your attention</h1>
-    <p>At random points the beeps briefly pause and you'll hear the spoken word <em>"pause"</em> — the probe. The instant before it, your mind was <em>somewhere</em>. Answer honestly with one arrow key — there are no right answers, and drifting off is completely normal and expected.</p>
-    <h2>The three responses</h2>
-    <ul>
-      <li><strong>On task</strong> — you were focused on the task (the beeps, or your breath).</li>
-      <li><strong>Off task</strong> — your mind had wandered to something <em>unrelated</em> (a thought, a memory, the room).</li>
-      <li><strong>Off task, on the other thing</strong> — you'd drifted, but specifically onto the <em>other</em> activity: caught up in your breathing during the sound task, or caught up in the beeps during the breath task.</li>
-      <li class="dim small">When the probe sounds, three large buttons fill the screen &mdash; tap the one that matches.</li>
-    </ul>
-    <p>NOTE: Answer based on your experience in the moments JUST before the probe, rather than whether your attention drifted at any point since the previous probe. Suppose that after the previous probe you resumed the sound task, caught yourself thinking about a TV show, then returned to focus and were interrupted by the probe. Your response should indicate on-task focus by tapping <strong>On task</strong>.</p>
-    <div class="note">Example: Suppose you hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since you were focused on something unrelated to the task just before the probe, classify this as off-task and tap <strong>Off task</strong>.</div>
-    <p class="small dim">During eyes-closed parts you'll keep your eyes shut and answer from memory of the three buttons (top = off task, middle = off task on the other activity, bottom = on task); during eyes-open parts you'll keep your eyes on a fixation point. So please get comfortable with these response options now.</p>
-    <p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
-    <div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
-  `);
-  el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
+STATE.screen = "probeInfo";
+show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
+
+```
+<p>At random points, the beeps will briefly pause and you’ll hear the spoken word <em>“pause”</em>. This is the probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
+
+<h2>The three responses</h2>
+<ul>
+  <li><strong>On task</strong> — you were focused on the task: the beeps during the sound task, or your breath during the breath task.</li>
+  <li><strong>Off task</strong> — your mind was on something unrelated to the task, such as a thought, memory, plan, or something in the room.</li>
+  <li><strong>Off task, on the other thing</strong> — your mind had drifted specifically to the other study activity: your breath during the sound task, or the beeps during the breath task.</li>
+</ul>
+
+<p>What matters is your attention <strong>immediately before</strong> the probe — not whether your mind wandered at some earlier point since the last probe.</p>
+
+<div class="note"><strong>Example 1 — answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, tap <strong>On task</strong>.</div>
+
+<div class="note"><strong>Example 2 — answer Off task:</strong> You hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since your attention was on something unrelated just before the probe, tap <strong>Off task</strong>.</div>
+
+<p class="small dim">During eyes-closed parts, keep your eyes shut and answer from memory: top = off task, middle = off task on the other activity, bottom = on task. During eyes-open parts, keep your eyes on the fixation point.</p>
+
+<p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
+
+<div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
+```
+
+`);
+el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
 }
+
 /* ---------------------- PRACTICE (30s each, ends with a required probe) ---- */
 function screenPracticeIntro(){
   STATE.screen = "practiceIntro";
