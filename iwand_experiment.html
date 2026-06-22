@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>iWand — Behavioral Pilot</title>
+<style>
+  :root{
+    --bg:#16181c;          /* calm near-black, low strain */
+    --bg-soft:#1d2025;
+    --panel:#23272e;
+    --ink:#e9ecf1;         /* primary text */
+    --ink-dim:#a4abb6;     /* secondary text */
+    --line:#333842;
+    --accent:#6ea8fe;      /* single quiet accent — instrument blue */
+    --accent-ink:#0c1422;
+    --good:#7bd88f;
+    --warn:#f0c674;
+    --bad:#e8806f;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:17px; line-height:1.6; -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  #app{height:100%;width:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{
+    width:100%; max-width:680px; background:var(--bg-soft); border:1px solid var(--line);
+    border-radius:14px; padding:34px 38px; box-shadow:0 18px 50px rgba(0,0,0,.35);
+    max-height:calc(100vh - 48px); overflow:auto;
+  }
+  h1{font-size:25px;line-height:1.25;margin:0 0 6px;letter-spacing:-.01em}
+  h2{font-size:20px;margin:26px 0 8px;letter-spacing:-.01em}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  p{margin:0 0 14px;color:var(--ink)}
+  .dim{color:var(--ink-dim)}
+  .small{font-size:14.5px}
+  ul{margin:0 0 14px;padding-left:20px}
+  li{margin:6px 0}
+  .key{display:inline-block;min-width:1.9em;text-align:center;font-family:var(--mono);font-size:13px;
+    padding:2px 8px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;background:#11141a;color:var(--ink)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
+  button.btn{
+    font:inherit;font-size:16px;cursor:pointer;border-radius:10px;padding:12px 20px;border:1px solid var(--line);
+    background:var(--panel);color:var(--ink);transition:transform .04s ease,border-color .15s ease,background .15s ease;
+  }
+  button.btn:hover{border-color:var(--accent)}
+  button.btn:active{transform:translateY(1px)}
+  button.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  button.primary:hover{filter:brightness(1.06)}
+  button.ghost{background:transparent}
+  input[type=text]{
+    font:inherit;font-size:16px;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);
+    background:#11141a;color:var(--ink);margin:4px 0 2px;
+  }
+  input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  label.field{display:block;font-size:14px;color:var(--ink-dim);margin-top:10px}
+  .note{font-size:13.5px;color:var(--ink-dim);border-left:2px solid var(--line);padding:2px 0 2px 14px;margin:14px 0}
+  .pill{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--ink-dim);border:1px solid var(--line);border-radius:999px;padding:3px 10px;margin:2px 6px 2px 0}
+  .scale{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 6px}
+  .scale button{flex:1 1 auto;min-width:54px}
+  .progress{font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--ink-dim);text-transform:uppercase}
+  hr{border:none;border-top:1px solid var(--line);margin:22px 0}
+  .ok{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  /* full-screen stage used during a block */
+  #stage{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;z-index:50}
+  #stage.show{display:flex}
+  #stage.dark{background:#000}
+  #stage.open{background:#191b1f}
+  .fix{font-size:64px;font-weight:300;color:#cfd4dc;user-select:none}
+  .stagebig{font-size:120px;font-weight:200;color:#e9ecf1}
+  .stagetext{max-width:560px;padding:0 24px;font-size:21px;color:#e9ecf1}
+  .stagehint{margin-top:22px;font-family:var(--mono);font-size:13px;letter-spacing:.1em;color:#8a929e;text-transform:uppercase}
+  .countbeat{font-family:var(--mono);font-size:14px;color:#8a929e;margin-top:18px}
+  @media (max-width:520px){ .card{padding:26px 22px} h1{font-size:22px} body{font-size:16px} }
+  @media (prefers-reduced-motion: reduce){ button.btn{transition:none} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="stage" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ======================================================================
+   iWand — web behavioral collection
+   Auditory oddball (RT / breath-attention) with experience-sampling probes.
+   Behavior-only port of parameters_bsWand_oddball.m + iWand recording script.
+   Self-contained: tones are synthesized (no audio files), no external libraries.
+   ====================================================================== */
+
+/* ============================ CONFIG =================================
+   Paramaters to config before deploying
+   ===================================================================== */
+const CONFIG = {
+  // ---- WHERE DATA GOES ----
+  DATA_ENDPOINT: "https://script.google.com/macros/s/AKfycbwiSvQQXZoHAieW-xkBY6nXkSgQT_kpM3j9V1UiTEIauoivQvfEbNTOzOLMImzApNIg/exec",
+  CONTACT_EMAIL: "esther.thielking@gmail.com",
+  STUDY_NAME:    "fourWand",
+  APP_VERSION:   "web-1.0",
+
+  // ---- WHICH CONDITIONS, AND HOW THEY'RE ORDERED ----
+  // Subset this list to shorten the session. Order is randomized per participant.
+  // iEO=eyes-open breath, iEC=eyes-closed breath, eEO=eyes-open sound, eEC=eyes-closed sound
+  CONDITIONS_TO_RUN: ["iEO", "iEC", "eEO", "eEC"],
+  RANDOMIZE_ORDER:   true,
+
+  // ---- CORE TIMING (mirrors parameters_bsWand_oddball.m) ----
+  blockMinutes:     7.33,   // minutes per condition
+  //blockMinutes:     1,   // minutes per condition
+  oddballRateHz:    1.4,    // tones per second  -> SOA = 1/1.4 = 0.714 s
+  standardHz:       500,    // standard tone (Hz)
+  deviantHz:        650,    // deviant/target tone (Hz)
+  stimDurationSecs: 0.100,  // tone duration
+  PROBE_GAP_MIN:    20,     // min seconds between probes
+  PROBE_GAP_MAX:    30,     // max seconds between probes
+
+  // ---- ODDBALL STRUCTURE ----
+  oddballChunkSize:          10,
+  nDeviantPerChunk:          2,
+  minStandardsBetweenDeviants: 2,
+
+  // ---- REMOTE-FRIENDLY OPTIONS (these are additions, not in the lab version) ----
+  SPEAK_EYES_CLOSED: false,  // speak short spoken guidance during eyes-closed blocks
+  REQUIRE_FULLSCREEN: true, // request fullscreen at start to reduce distraction
+  SHORT_PRACTICE:     true, // brief guided practice before the real run
+
+  // ---- AUDIO ----
+  toneGain: 0.18,           // 0..1 amplitude of tones
+};
+
+/* ===================== DERIVED PARAMETERS ============================ */
+const SOA            = 1 / CONFIG.oddballRateHz;
+const ISI            = SOA - CONFIG.stimDurationSecs;
+const RESP_WIN       = SOA;                       // response window = one SOA
+const BLOCK_SECS     = CONFIG.blockMinutes * 60;
+const STANDARD = 1, DEVIANT = 2;
+const MIN_DEV_GAP    = CONFIG.minStandardsBetweenDeviants + 1; // positions
+const N_REQ          = Math.ceil(BLOCK_SECS / SOA);
+const N_CHUNKS       = Math.ceil(N_REQ / CONFIG.oddballChunkSize);
+const N_TONES        = N_CHUNKS * CONFIG.oddballChunkSize;
+let   GAP_MIN_STIM   = Math.ceil(CONFIG.PROBE_GAP_MIN / SOA);
+let   GAP_MAX_STIM   = Math.floor(CONFIG.PROBE_GAP_MAX / SOA);
+if (GAP_MAX_STIM < GAP_MIN_STIM) GAP_MAX_STIM = GAP_MIN_STIM;
+
+const COND_DEFS = {
+  iEO:{label:"iEO",eye:"EO",eyeName:"eyes open",  eyeCode:1,task:"breath",taskName:"breath",taskCode:0},
+  iEC:{label:"iEC",eye:"EC",eyeName:"eyes closed",eyeCode:0,task:"breath",taskName:"breath",taskCode:0},
+  eEO:{label:"eEO",eye:"EO",eyeName:"eyes open",  eyeCode:1,task:"sound", taskName:"sound", taskCode:1},
+  eEC:{label:"eEC",eye:"EC",eyeName:"eyes closed",eyeCode:0,task:"sound", taskName:"sound", taskCode:1},
+};
+
+/* ===================== URL PARAMS (optional) ========================= */
+const URLP = new URLSearchParams(location.search);
+const FORCE_COND = URLP.get("cond");          // e.g. ?cond=eEO  (single-condition test)
+const PREFILL_PID = URLP.get("pid") || "";    // e.g. ?pid=alex
+
+/* ===================== GLOBAL SESSION STATE ========================= */
+const SESSION = {
+  participant_id: PREFILL_PID,
+  session_id: makeSessionId(),
+  startISO: null, endISO: null,
+  order: [],                 // array of condition labels in run order
+  rows: [],                  // flat data rows -> CSV + POST
+  meta: {},
+};
+window.__IWAND = SESSION;    // exposed for the backup-download button
+
+const STATE = {
+  screen: "welcome",
+  runState: "idle",          // idle | running | probe  (inside a block)
+  task: null, eye: null,     // current condition
+};
+
+/* ===================== AUDIO ENGINE ================================= */
+let actx = null;
+let outLatSec = 0;
+function initAudio(){
+  if (actx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  actx = new AC({ latencyHint: "interactive" });
+  outLatSec = (typeof actx.outputLatency === "number" && actx.outputLatency > 0)
+              ? actx.outputLatency
+              : (actx.baseLatency || 0);
+}
+function resumeAudio(){ if (actx && actx.state === "suspended") actx.resume(); }
+
+// project an audioContext time onto the performance.now() clock (for RT)
+function audioToPerf(at){
+  return (at - actx.currentTime) * 1000 + performance.now() + outLatSec * 1000;
+}
+// schedule a pure tone with a short click-free envelope
+function scheduleTone(freq, durSec, when, gain){
+  const osc = actx.createOscillator();
+  const g = actx.createGain();
+  osc.type = "sine"; osc.frequency.value = freq;
+  const a = 0.005, r = 0.006;                       // 5/6 ms ramps
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(gain, when + a);
+  g.gain.setValueAtTime(gain, when + Math.max(durSec - r, a));
+  g.gain.exponentialRampToValueAtTime(0.0001, when + durSec);
+  osc.connect(g).connect(actx.destination);
+  osc.start(when); osc.stop(when + durSec + 0.02);
+}
+// distinct probe (a gentle low double-note) — clearly not an oddball tone
+function scheduleProbeCue(when){
+  const notes = [[392, 0.16, 0.10], [294, 0.30, 0.10]]; // G4 then D4, soft
+  let t = when;
+  notes.forEach(([f,d,gn])=>{ scheduleSoft(f,d,t,gn); t += d*0.78; });
+  return when;
+}
+function scheduleSoft(freq, durSec, when, gain){
+  const osc = actx.createOscillator(); const g = actx.createGain();
+  osc.type = "sine"; osc.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(gain, when + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + durSec);
+  osc.connect(g).connect(actx.destination);
+  osc.start(when); osc.stop(when + durSec + 0.02);
+}
+// block-end chime (pleasant, signals "open your eyes")
+function scheduleBell(when){
+  [[660,0.0],[990,0.06],[1320,0.12]].forEach(([f,off])=>{
+    const osc = actx.createOscillator(); const g = actx.createGain();
+    osc.type="sine"; osc.frequency.value=f;
+    const t=when+off;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.14,t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.9);
+    osc.connect(g).connect(actx.destination); osc.start(t); osc.stop(t+1.0);
+  });
+}
+function scheduleBeep(when, high){
+  scheduleSoft(high?880:560, 0.12, when, 0.12);
+}
+// brief spoken guidance (eyes-closed only); silent + safe if unsupported
+function speak(text){
+  if (!CONFIG.SPEAK_EYES_CLOSED) return;
+  try{
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0; u.pitch = 1.0; u.volume = 0.9;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* ===================== SEQUENCE GENERATOR ==========================
+   Faithful port of the MATLAB chunk algorithm: each 10-tone chunk has
+   exactly 8 standards + 2 deviants, deviants >= MIN_DEV_GAP apart
+   (>= 2 standards between), including across chunk boundaries.
+   ================================================================== */
+function buildBlockSequence(){
+  const C = CONFIG.oddballChunkSize;
+  let seq = [];
+  let lastDevGlobal = -999;
+  for (let ichunk = 1; ichunk <= N_CHUNKS; ichunk++){
+    const pairs = [];
+    for (let p1 = 1; p1 <= C; p1++){
+      for (let p2 = p1 + MIN_DEV_GAP; p2 <= C; p2++){
+        const g1 = (ichunk - 1) * C + p1;
+        if ((g1 - lastDevGlobal) >= MIN_DEV_GAP) pairs.push([p1, p2]);
+      }
+    }
+    if (!pairs.length) throw new Error("Cannot build oddball chunk with spacing rule.");
+    const [p1, p2] = pairs[(Math.random() * pairs.length) | 0];
+    const chunk = new Array(C).fill(STANDARD);
+    chunk[p1 - 1] = DEVIANT; chunk[p2 - 1] = DEVIANT;
+    seq = seq.concat(chunk);
+    lastDevGlobal = (ichunk - 1) * C + p2;
+  }
+  return seq.slice(0, N_TONES);
+}
+function randGapStim(){ return GAP_MIN_STIM + ((Math.random() * (GAP_MAX_STIM - GAP_MIN_STIM + 1)) | 0); }
+
+/* ===================== UI HELPERS ================================== */
+const app = document.getElementById("app");
+const stage = document.getElementById("stage");
+function show(html){ app.innerHTML = `<div class="card">${html}</div>`; app.scrollTop = 0; }
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function setStage(mode, inner){ // mode: 'dark' | 'open' | 'hide'
+  stage.className = "";
+  if (mode === "hide"){ stage.classList.remove("show"); stage.innerHTML = ""; return; }
+  stage.classList.add("show", mode);
+  stage.innerHTML = inner || "";
+}
+
+/* ===================== SCREEN FLOW ================================= */
+function start(){
+  if (FORCE_COND && COND_DEFS[FORCE_COND]) SESSION.order = [FORCE_COND];
+  else {
+    let labels = CONFIG.CONDITIONS_TO_RUN.filter(l => COND_DEFS[l]);
+    if (CONFIG.RANDOMIZE_ORDER) labels = shuffle(labels.slice());
+    SESSION.order = labels;
+  }
+  screenWelcome();
+}
+
+function screenWelcome(){
+  STATE.screen = "welcome";
+  show(`
+    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+    <h1>Thanks for helping us study how our attention naturally fluctuates!</h1>
+    <p class="dim small">It takes about <strong>${esc(estTotalMinutes())} minutes</strong> in total, split into four shorter blocks. You can take breaks after each block. It runs entirely in this tab, and your responses are sent to the researcher automatically at the end.</p>
+    <h2>Before you start</h2>
+    <ul class="small">
+      <li><strong>Use headphones</strong> if you can, in a quiet room where you won't be interrupted.</li>
+      <li>Use a <strong>laptop or desktop with a keyboard</strong> (this needs the arrow keys and spacebar).</li>
+      <li>Silence notifications and close other tabs.</li>
+    </ul>
+    <label class="field" for="pid">Your name or initials (so the researcher knows whose data this is)</label>
+    <input id="pid" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. Alex R" value="${esc(SESSION.participant_id)}" />
+    <div id="pidErr" class="small bad" style="min-height:18px"></div>
+    <hr/>
+    <h2 class="small" style="margin-top:0">Quick sound check</h2>
+    <p class="small dim">Press play and adjust your volume so the beeps are clearly audible but comfortable. You'll hear the two beep types you'll be listening for.</p>
+    <div class="row">
+      <button class="btn" id="testStd">Play standard beep</button>
+      <button class="btn" id="testDev">Play target beep</button>
+      <button class="btn" id="testProbe">Play probe </button>
+    </div>
+    <label class="small" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px">
+      <input type="checkbox" id="heard" style="margin-top:5px"/>
+      <span>I can hear the beeps clearly.</span>
+    </label>
+    <div class="row" style="margin-top:18px">
+      <button class="btn primary" id="go">Continue</button>
+    </div>
+  `);
+  el("testStd").onclick = ()=>{ initAudio(); resumeAudio(); scheduleTone(CONFIG.standardHz, CONFIG.stimDurationSecs, actx.currentTime+0.05, CONFIG.toneGain); };
+  el("testDev").onclick = ()=>{ initAudio(); resumeAudio(); scheduleTone(CONFIG.deviantHz, CONFIG.stimDurationSecs, actx.currentTime+0.05, CONFIG.toneGain); };
+  el("testProbe").onclick = ()=>{ initAudio(); resumeAudio(); scheduleProbeCue(actx.currentTime+0.05); };
+  el("go").onclick = ()=>{
+    const pid = el("pid").value.trim();
+    if (pid.length < 1){ el("pidErr").textContent = "Please enter your name or initials."; return; }
+    if (!el("heard").checked){ el("pidErr").textContent = "Please confirm you can hear the beeps."; return; }
+    SESSION.participant_id = pid;
+    initAudio(); resumeAudio();
+    if (CONFIG.REQUIRE_FULLSCREEN) requestFS();
+    SESSION.startISO = new Date().toISOString();
+    screenOverview();
+  };
+}
+
+function screenOverview(){
+  STATE.screen = "overview";
+  const nC = SESSION.order.length;
+  show(`
+    <p class="eyebrow">how it works</p>
+    <h1>What you'll do</h1>
+    <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, back to back, each about <strong>${esc(CONFIG.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
+    <p>In every part, soft beeps play at a steady pace. There are two kinds of part:</p>
+    <ul>
+      <li><strong>Sound tasks</strong> — you respond to a specific beep.</li>
+      <li><strong>Breath tasks</strong> — you ignore the beeps and follow your breathing.</li>
+    </ul>
+    <p>Some parts are done with your <strong>eyes open</strong>, some with your <strong>eyes closed</strong>. Each part begins with its own short reminder of what to do, so you don't need to memorize everything now.</p>
+    <div class="note">Throughout, the beeps will occasionally pause for a <em>probe</em>. When you hear it, you'll use the arrow keys to report where your attention was in the moment <strong>JUST</strong> before the probe. The next screen explains this — it's important you understand this before starting.</div>
+    <div class="row"><button class="btn primary" id="next">Next</button></div>
+  `);
+  el("next").onclick = screenProbeInstructions;
+}
+
+function screenProbeInstructions(){
+  STATE.screen = "probeInfo";
+  show(`
+    <p class="eyebrow">the probe</p>
+    <h1>Reporting your attention</h1>
+    <p>At random points the beeps briefly pause and you'll hear a probe. The instant before it, your mind was <em>somewhere</em>. Answer honestly with one arrow key — there are no right answers, and drifting off is completely normal and expected.</p>
+    <h2>The three responses</h2>
+    <ul>
+      <li><span class="key">↓</span> <strong>On task</strong> — you were focused on the task (the beeps, or your breath).</li>
+      <li><span class="key">↑</span> <strong>Off task</strong> — your mind had wandered to something <em>unrelated</em> (a thought, a memory, the room).</li>
+      <li><span class="key">←</span> or <span class="key">→</span> <strong>Off task, on the other thing</strong> — you'd drifted, but specifically onto the <em>other</em> activity: caught up in your breathing during the sound task, or caught up in the beeps during the breath task.</li>
+    </ul>
+    <p>NOTE: Ensure you answer basesd on your experience in the moments JUST before the probe, rather than based on whether your attention drifted at any point since the previous probe. Supposed that after responding to the previous probe, you resumed the sound task, caught yourself thinking about a TV show, then resumed focus on the task and was interrupted by the probe. Your response should indicate on task focus by pressing the down arrow</p>
+    <div class="note">Example: Suppose that you hear the probe and realize that just before it, while you were still been responding to the target tones during the sound task, you were mostly deciding where to eat dinner later. Since you were focused on something unrelated to the task just before the probe, you should classify this as off-task and respond with the up arrow.</div>
+    <p class="small dim">During eyes-closed parts you'll keep your eyes shut and answer from memory of these three keys, and during the eyes-open part you'll keep your eyes on a fixation point, so please get comfortable with these response options now.</p>
+    <p> We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and are interested in capturing your experience as it naturally unfolds. There is no right or wrong answer—whether your mind stays on task or drifts to other thoughts, both experiences are valuable to us. Please respond honestly based on your experience just before the probe.
+</p>
+    <div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
+  `);
+  el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
+}
+
+/* ---------------------- PRACTICE -------------------------------- */
+function screenPracticeIntro(){
+  STATE.screen = "practiceIntro";
+  show(`
+    <p class="eyebrow">practice · 1 of 2</p>
+    <h1>Practice the listening task</h1>
+    <p>You'll hear a stream of beeps. Most are the <strong>standard</strong> beep (lower). Once in a while a <strong>target</strong> beep plays (higher). Press <span class="key">space</span> as quickly as you can whenever you hear a <em>target</em>. Do nothing for the standards.</p>
+    <p class="small dim">This practice is about 15 seconds. Keep your hand on the spacebar.</p>
+    <div class="row"><button class="btn primary" id="go">Start practice</button></div>
+  `);
+  el("go").onclick = ()=> runListeningPractice();
+}
+
+function runListeningPractice(){
+  STATE.screen = "practiceRun"; STATE.runState = "running"; STATE.task = "sound";
+  // short fixed-ish practice sequence: ~21 tones with 3 targets, spaced
+  const seq = []; for (let i=0;i<21;i++) seq.push(STANDARD);
+  [4, 11, 17].forEach(i => seq[i] = DEVIANT);
+  setStage("open", `<div class="fix">+</div><div class="stagehint">press space on the higher beep</div>`);
+  let idx = 0, hits = 0, targets = 0, fa = 0;
+  let curOnsetPerf = -1, curIsTarget = false, curResponded = false;
+  const t0 = actx.currentTime + 0.4;
+  const onsets = seq.map((_, i) => t0 + i * SOA);
+  onsets.forEach((when, i) => {
+    const isT = seq[i] === DEVIANT;
+    scheduleTone(isT ? CONFIG.deviantHz : CONFIG.standardHz, CONFIG.stimDurationSecs, when, CONFIG.toneGain);
+  });
+  PRACTICE.onKey = (e) => {
+    if (e.code === "Space"){
+      e.preventDefault();
+      const t = performance.now();
+      // find last onset <= t
+      let k = -1; for (let i=0;i<onsets.length;i++){ if (audioToPerf(onsets[i]) <= t) k = i; }
+      if (k >= 0){
+        const wasT = seq[k] === DEVIANT;
+        if (wasT){ hits++; } else { fa++; }
+      }
+    }
+  };
+  targets = seq.filter(x => x === DEVIANT).length;
+  const endAt = t0 + seq.length * SOA + 0.2;
+  practiceWatch(endAt, () => {
+    PRACTICE.onKey = null; STATE.runState = "idle"; setStage("hide");
+    show(`
+      <p class="eyebrow">practice · 1 of 2</p>
+      <h1>Nice.</h1>
+      <p>You caught <strong>${hits} of ${targets}</strong> target beeps${fa>0?`, with ${fa} press${fa>1?"es":""} on a standard`:""}. In the real task, just aim to press quickly on the higher beep and let the standards go by.</p>
+      <div class="row">
+        <button class="btn ghost" id="again">Repeat</button>
+        <button class="btn primary" id="next">Continue to breath practice</button>
+      </div>
+    `);
+    el("again").onclick = runListeningPractice;
+    el("next").onclick = screenBreathPracticeIntro;
+  });
+}
+
+function screenBreathPracticeIntro(){
+  STATE.screen = "practiceBreathIntro";
+  show(`
+    <p class="eyebrow">practice · 2 of 2</p>
+    <h1>Practice the breath task</h1>
+    <p>Breathe naturally. Each time you finish breathing <em>out</em>, press <span class="key">space</span> once — one press per exhale. The beeps keep playing but are irrelevant to the breath task.</p>
+    <p class="small dim">This practice is about 18 seconds.</p>
+    <div class="row"><button class="btn primary" id="go">Start practice</button></div>
+  `);
+  el("go").onclick = ()=> runBreathPractice();
+}
+
+function runBreathPractice(){
+  STATE.screen = "practiceRun"; STATE.runState = "running"; STATE.task = "breath";
+  setStage("open", `<div class="fix">+</div><div class="stagehint">press space on each exhale</div>`);
+  let presses = 0;
+  const t0 = actx.currentTime + 0.4, dur = 18;
+  const n = Math.floor(dur / SOA);
+  for (let i=0;i<n;i++){ scheduleTone(CONFIG.standardHz, CONFIG.stimDurationSecs, t0 + i*SOA, CONFIG.toneGain); }
+  PRACTICE.onKey = (e) => { if (e.code === "Space"){ e.preventDefault(); presses++; } };
+  practiceWatch(actx.currentTime + dur, () => {
+    PRACTICE.onKey = null; STATE.runState = "idle"; setStage("hide");
+    show(`
+      <p class="eyebrow">practice · 2 of 2</p>
+      <p>You marked <strong>${presses} breath${presses!==1?"s":""}</strong>. Ensure you're breahting naturally and pressing the space bar precisely at the end of each exhale.</p>
+      <p class="dim small">Last thing: remember the probe. When the beeps pause and you hear the probe, report your attention with <span class="key">↓</span> on task · <span class="key">↑</span> off task · <span class="key">←</span>/<span class="key">→</span> off task, on the other thing.</p>
+      <div class="row">
+        <button class="btn ghost" id="again">Repeat</button>
+        <button class="btn primary" id="next">I'm ready to begin the study</button>
+      </div>
+    `);
+    el("again").onclick = runBreathPractice;
+    el("next").onclick = firstConditionGate;
+  });
+}
+
+const PRACTICE = { onKey: null };
+function practiceWatch(endAudioTime, done){
+  const iv = setInterval(()=>{
+    if (actx.currentTime >= endAudioTime){ clearInterval(iv); done(); }
+  }, 50);
+}
+
+/* ---------------------- CONDITION SEQUENCE ---------------------- */
+let condIndex = 0;
+function firstConditionGate(){ condIndex = 0; nextConditionIntro(); }
+
+function nextConditionIntro(){
+  if (condIndex >= SESSION.order.length){ return finish(); }
+  const def = COND_DEFS[SESSION.order[condIndex]];
+  STATE.screen = "condIntro"; STATE.task = def.task; STATE.eye = def.eye;
+  const isSound = def.task === "sound";
+  const isClosed = def.eye === "EC";
+  const taskBlock = isSound
+    ? `<ul>
+         <li>The task is to listen for the <strong>higher target beep</strong> among the lower standards, and press <span class="key">space</span> as QUICKLY as you can on each <strong>target</strong>. Do not respond to the standards. When on task, your attention is focused on listening to each sound as it arises and responding as fast as possible to targets and withholding responses from standards. </li>
+       </ul>`
+    : `<ul>
+         <li>The task is to breathe naturally and press <span class="key">space</span> once at the end of each <strong>exhale</strong> before your inhale. When on task, your attention is focused on the sensations of your breath, remaining aware of each inhale and exhale, and being precise with the button press. Imagine the experimenters are additionally physiologically tracking your objective inhale and exhale timing for comparison. </li>
+         <li>The beeps will continue playing but they are irrelevant for this task.</li>
+       </ul>`;
+  const eyeBlock = isClosed
+    ? `<div class="note"><strong>Eyes closed.</strong> Prepare by placing your left pointer finger on the space bar and your right between the up and down arrows to answer the probes. When you press start, you'll hear a 5s countdown-- close your eyes and keep them shut until the <em>chime</em> at the end of the block. Answer the probes by feel, using the arrow keys.</div>`
+    : `<div class="note"><strong>Eyes open.</strong> Keep your gaze relaxed on the <strong>+</strong> in the centre of the screen.</div>`;
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length}</p>
+    <h1>${isSound ? "Sound task" : "breath task"} — ${isClosed ? "eyes closed" : "eyes open"}</h1>
+    ${taskBlock}
+    ${eyeBlock}
+    <p class="small dim">The probe is the same as before: <span class="key">↓</span> on task · <span class="key">↑</span> off task · <span class="key">←</span>/<span class="key">→</span> off task, on the other activity. Roughly ${esc(CONFIG.blockMinutes)} minutes.</p>
+    <div class="row"><button class="btn primary" id="ready">Start this part</button></div>
+  `);
+  el("ready").onclick = ()=> countdownThenBlock(def);
+}
+
+function countdownThenBlock(def){
+  STATE.screen = "countdown";
+  resumeAudio();
+  const isClosed = def.eye === "EC";
+  // schedule 5 beeps then block start
+  const lead = 0.25;
+  const startBeep = actx.currentTime + lead;
+  for (let i=0;i<5;i++) scheduleBeep(startBeep + i*1.0, i===4);
+  const blockStartAudio = startBeep + 5*1.0;
+  if (isClosed){
+    setStage("dark", `<div class="stagetext">Close your eyes now.</div><div class="countbeat">starting…</div>`);
+    speak("Close your eyes and keep them closed until you hear the chime.");
+  } else {
+    setStage("open", `<div class="stagebig" id="cnum">5</div><div class="countbeat">get ready</div>`);
+  }
+  // visual countdown (eyes open)
+  let n = 5;
+  const vi = setInterval(()=>{
+    n--;
+    if (!isClosed && el("cnum")) el("cnum").textContent = n > 0 ? String(n) : "+";
+    if (n <= 0){ clearInterval(vi); }
+  }, 1000);
+  // launch the block exactly at blockStartAudio
+  waitUntilAudio(blockStartAudio, ()=> runBlock(def, blockStartAudio));
+}
+
+function waitUntilAudio(at, cb){
+  const iv = setInterval(()=>{ if (actx.currentTime >= at){ clearInterval(iv); cb(); } }, 15);
+}
+
+/* ===================== THE BLOCK (core engine) ===================== */
+let BLK = null;            // per-block working data
+let schedTimer = null;
+
+function runBlock(def, blockStartAudio){
+  STATE.screen = "block"; STATE.runState = "running"; STATE.task = def.task; STATE.eye = def.eye;
+  const isSound = def.task === "sound";
+  const isClosed = def.eye === "EC";
+
+  // visuals
+  if (isClosed) setStage("dark", "");
+  else setStage("open", `<div class="fix">+</div>`);
+
+  BLK = {
+    def, isSound, isClosed,
+    seq: buildBlockSequence(),
+    stimIndex: 0,
+    blockStartAudio,
+    blockStartPerf: audioToPerf(blockStartAudio),
+    blockEndAudio: blockStartAudio + BLOCK_SECS,
+    nextToneTime: blockStartAudio,
+    stimSinceProbe: 0,
+    nextProbeGapStim: randGapStim(),
+    T: [], Probe: [], Breath: [], Button: [],
+    nStandards: 0, nDeviants: 0,
+    lastBreathPerf: NaN,
+    tabBlur: 0,
+    ended: false,
+    KSS: NaN, eye_report: NaN, task_report: NaN,
+  };
+
+  // scheduler tick
+  schedTimer = setInterval(schedulerTick, 25);
+}
+
+function schedulerTick(){
+  if (!BLK || STATE.runState !== "running") return;
+  const now = actx.currentTime;
+  // end of block?
+  if (now >= BLK.blockEndAudio || BLK.stimIndex >= BLK.seq.length){
+    finalizeActiveTrial();
+    endBlock();
+    return;
+  }
+  const lookahead = now + 0.12;
+  while (BLK.nextToneTime < lookahead){
+    if (BLK.nextToneTime >= BLK.blockEndAudio || BLK.stimIndex >= BLK.seq.length){
+      finalizeActiveTrial(); endBlock(); return;
+    }
+    // probe due? (last two played standards AND next two to-play standards)
+    if (probeDue()){
+      insertProbe();
+      return; // scheduler pauses; resumes after the response
+    }
+    scheduleNextTone();
+  }
+}
+
+function probeDue(){
+  if (BLK.T.length < 2) return false;
+  if (BLK.stimSinceProbe < BLK.nextProbeGapStim) return false;
+  const a = BLK.T[BLK.T.length-1], b = BLK.T[BLK.T.length-2];
+  if (!(a.isStandard && b.isStandard)) return false;
+  const i = BLK.stimIndex;
+  if (i+1 >= BLK.seq.length) return false;
+  return BLK.seq[i] === STANDARD && BLK.seq[i+1] === STANDARD;
+}
+
+function scheduleNextTone(){
+  // finalize the previous trial's no-response outcome before starting a new one
+  finalizeActiveTrial();
+
+  const i = BLK.stimIndex;
+  const stim = BLK.seq[i];
+  const isTarget = stim === DEVIANT;
+  const when = BLK.nextToneTime;
+  scheduleTone(isTarget ? CONFIG.deviantHz : CONFIG.standardHz, CONFIG.stimDurationSecs, when, CONFIG.toneGain);
+
+  const onsetPerf = audioToPerf(when);
+  const tr = {
+    trial: BLK.T.length + 1,
+    sequence_index: i + 1,
+    Stimulus: stim,
+    StimulusName: isTarget ? "deviant" : "standard",
+    isStandard: stim === STANDARD ? 1 : 0,
+    isDeviant: isTarget ? 1 : 0,
+    isTarget: isTarget ? 1 : 0,
+    onsetPerf,
+    stimOn_block: (onsetPerf - BLK.blockStartPerf) / 1000,
+    SOA, ISI,
+    realizedToneISI: BLK.T.length ? (onsetPerf - BLK.T[BLK.T.length-1].onsetPerf)/1000 : NaN,
+    // response fields (sound task)
+    Report: BLK.isSound ? 0 : null,
+    Correct: null,
+    ResponseType: "",
+    RT: NaN, RT_off: NaN,
+    extraPressesAfterResponse: 0,
+    finalized: false,
+  };
+  BLK.T.push(tr);
+  BLK.activeTrial = tr;
+  BLK.nStandards += tr.isStandard;
+  BLK.nDeviants  += tr.isDeviant;
+  BLK.stimSinceProbe += 1;
+  BLK.stimIndex += 1;
+  BLK.nextToneTime = when + SOA;
+}
+
+// when a sound-task trial's window closes with no response -> miss / correct_reject
+function finalizeActiveTrial(){
+  const tr = BLK && BLK.activeTrial;
+  if (!tr || tr.finalized) return;
+  if (BLK.isSound && tr.Report === 0){
+    if (tr.isTarget){ tr.Correct = 0; tr.ResponseType = "miss"; }
+    else { tr.Correct = 1; tr.ResponseType = "correct_reject"; }
+  }
+  tr.finalized = true;
+}
+
+function insertProbe(){
+  STATE.runState = "probe";
+  const when = BLK.nextToneTime;            // where the next tone would have been
+  scheduleProbeCue(when);
+  const probeOnPerf = audioToPerf(when);
+  const pr = {
+    probe: BLK.Probe.length + 1,
+    plannedGapStim: BLK.nextProbeGapStim,
+    plannedGapSecs: BLK.nextProbeGapStim * SOA,
+    actualGapStim: BLK.stimSinceProbe,
+    actualGapSecs: BLK.stimSinceProbe * SOA,
+    probeOnPerf,
+    probeOn_block: (probeOnPerf - BLK.blockStartPerf)/1000,
+    RT: NaN, response_key: "", response_text: "", mind_wandering: NaN,
+    answered: false,
+  };
+  BLK.Probe.push(pr);
+  BLK.activeProbe = pr;
+
+  // eyes-open: show the prompt on screen; eyes-closed: dark + spoken reminder
+  if (!BLK.isClosed){
+    setStage("open", `
+      <div class="stagetext">Where was your attention, just before the probe?</div>
+      <div class="stagehint" style="margin-top:26px">
+        <span class="key">↓</span> on task &nbsp;·&nbsp;
+        <span class="key">↑</span> off task &nbsp;·&nbsp;
+        <span class="key">←</span>/<span class="key">→</span> off task, on the other thing
+      </div>`);
+  } else {
+    setStage("dark", "");
+    speak("Where was your attention? Down for on task. Up for off task. Left or right for the other activity.");
+  }
+}
+
+function recordProbeResponse(code, keyName, text){
+  const pr = BLK.activeProbe;
+  if (!pr || pr.answered) return;
+  const t = performance.now();
+  pr.RT = (t - pr.probeOnPerf)/1000;
+  pr.response_key = keyName;
+  pr.response_text = text;
+  pr.mind_wandering = code;
+  pr.answered = true;
+
+  // reset gap, resume tone stream after one SOA (mirrors nextEvent = now + SOA)
+  BLK.stimSinceProbe = 0;
+  BLK.nextProbeGapStim = randGapStim();
+  BLK.nextToneTime = actx.currentTime + SOA;
+
+  // restore block visuals
+  if (BLK.isClosed) setStage("dark", "");
+  else setStage("open", `<div class="fix">+</div>`);
+
+  // if block time elapsed during the probe, end now; else resume
+  if (actx.currentTime >= BLK.blockEndAudio){ finalizeActiveTrial(); endBlock(); }
+  else { STATE.runState = "running"; }
+}
+
+function endBlock(){
+  if (!BLK || BLK.ended) return;
+  BLK.ended = true;
+  STATE.runState = "idle";
+  clearInterval(schedTimer); schedTimer = null;
+  BLK.blockEndPerf = performance.now();
+  BLK.blockDuration = (BLK.blockEndPerf - BLK.blockStartPerf)/1000;
+  // chime + (eyes-closed) spoken "open your eyes"
+  scheduleBell(actx.currentTime + 0.05);
+  if (BLK.isClosed) speak("You can open your eyes now.");
+  setTimeout(surveyKSS, 700);
+}
+
+/* ===================== POST-BLOCK SURVEY =========================== */
+function surveyKSS(){
+  STATE.screen = "kss"; setStage("hide");
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length} · </p>
+    <h1>Your sleepiness during the five minutes before this rating was:</h1>
+    <p class="dim small">Pick the number that best fits the last moments before the chime.</p>
+    <div class="scale" id="kssScale"></div>
+    <div class="small dim" style="display:flex;justify-content:space-between;margin-top:2px">
+      <span>1 · extremely alert</span><span>9 · fighting sleep</span>
+    </div>
+    <div id="kssLabels" class="small" style="margin-top:14px;color:var(--ink-dim)"></div>
+  `);
+  const labels = ["extremely alert","very alert","alert","rather alert",
+    "neither alert nor sleepy","some signs of sleepiness","sleepy, no effort to stay awake",
+    "sleepy, some effort to stay awake","very sleepy, fighting sleep"];
+  const wrap = el("kssScale");
+  for (let i=1;i<=9;i++){
+    const b = document.createElement("button");
+    b.className = "btn"; b.textContent = i;
+    b.onmouseenter = ()=> el("kssLabels").textContent = i + " — " + labels[i-1];
+    b.onfocus = b.onmouseenter;
+    b.onclick = ()=>{ BLK.KSS = i; surveyEye(); };
+    wrap.appendChild(b);
+  }
+}
+
+function surveyEye(){
+  STATE.screen = "eyeRep";
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length} · </p>
+    <h1>During that part, were your eyes open or closed?</h1>
+    <div class="row">
+      <button class="btn" id="open">Open</button>
+      <button class="btn" id="closed">Closed</button>
+    </div>
+  `);
+  el("open").onclick = ()=>{ BLK.eye_report = 1; surveyTask(); };
+  el("closed").onclick = ()=>{ BLK.eye_report = 0; surveyTask(); };
+}
+
+function surveyTask(){
+  STATE.screen = "taskRep";
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length} · </p>
+    <h1>Which task were you doing?</h1>
+    <div class="row">
+      <button class="btn" id="sound">Listening for the target beep</button>
+      <button class="btn" id="breath">Following my breath</button>
+    </div>
+  `);
+  el("sound").onclick = ()=>{ BLK.task_report = 1; finishBlock(); };
+  el("breath").onclick = ()=>{ BLK.task_report = 0; finishBlock(); };
+}
+
+function finishBlock(){
+  flattenBlockToRows();
+  condIndex++;
+  if (condIndex >= SESSION.order.length){ finish(); return; }
+  // short break screen
+  STATE.screen = "break";
+  show(`
+    <p class="progress">Part ${condIndex} of ${SESSION.order.length} complete</p>
+    <h1>Take a breather</h1>
+    <p>Continue to get the next block's instructions: ${SESSION.order.length - condIndex} part${(SESSION.order.length-condIndex)>1?"s":""} to go.</p>
+    <div class="row"><button class="btn primary" id="next">Continue</button></div>
+  `);
+  el("next").onclick = nextConditionIntro;
+}
+
+/* ===================== DATA: FLATTEN, CSV, SUBMIT ================== */
+const HEADERS = [
+  "participant_id","session_id","app_version","condition_position","condition",
+  "eye","eyeName","eyeCode","task","taskName","taskCode","block","row_type","index",
+  // trial
+  "trial","sequence_index","Stimulus","StimulusName","isStandard","isDeviant","isTarget",
+  "Report","Correct","ResponseType","RT","RT_off","stimOn_block","SOA","ISI","realizedToneISI","extraPresses",
+  // probe
+  "probe","plannedGapStim","plannedGapSecs","actualGapStim","actualGapSecs","probeOn_block",
+  "probe_RT","response_key","response_text","mind_wandering",
+  // breath
+  "breath_event","press_block","since_last_press",
+  // button (raw press)
+  "press","context","time_block","button_RT","preceding_trial","preceding_stimulus_name",
+  // block-survey / meta
+  "KSS","eye_report","task_report","block_duration","n_tones","n_standards","n_deviants",
+  "n_probes","n_breaths","n_button_presses","tab_blur_count",
+  "session_start","session_end","total_duration","user_agent","screen_w","screen_h",
+  "audio_out_latency_ms","audio_sample_rate","order","conditions_run","soa_sec","probe_gap_min_s","probe_gap_max_s"
+];
+
+function commonCols(){
+  const def = BLK.def;
+  return {
+    participant_id: SESSION.participant_id,
+    session_id: SESSION.session_id,
+    app_version: CONFIG.APP_VERSION,
+    condition_position: condIndex + 1,
+    condition: def.label, eye: def.eye, eyeName: def.eyeName, eyeCode: def.eyeCode,
+    task: def.task, taskName: def.taskName, taskCode: def.taskCode, block: 1,
+  };
+}
+
+function pushRow(obj){ SESSION.rows.push(obj); }
+
+function flattenBlockToRows(){
+  const c = commonCols();
+  // trials
+  BLK.T.forEach((t,k)=> pushRow(Object.assign({}, c, {
+    row_type:"trial", index:k+1,
+    trial:t.trial, sequence_index:t.sequence_index, Stimulus:t.Stimulus, StimulusName:t.StimulusName,
+    isStandard:t.isStandard, isDeviant:t.isDeviant, isTarget:t.isTarget,
+    Report:t.Report, Correct:t.Correct, ResponseType:t.ResponseType,
+    RT:fmt(t.RT), RT_off:fmt(t.RT_off), stimOn_block:fmt(t.stimOn_block),
+    SOA:fmt(t.SOA), ISI:fmt(t.ISI), realizedToneISI:fmt(t.realizedToneISI),
+    extraPresses:t.extraPressesAfterResponse,
+  })));
+  // probes
+  BLK.Probe.forEach((p,k)=> pushRow(Object.assign({}, c, {
+    row_type:"probe", index:k+1,
+    probe:p.probe, plannedGapStim:p.plannedGapStim, plannedGapSecs:fmt(p.plannedGapSecs),
+    actualGapStim:p.actualGapStim, actualGapSecs:fmt(p.actualGapSecs), probeOn_block:fmt(p.probeOn_block),
+    probe_RT:fmt(p.RT), response_key:p.response_key, response_text:p.response_text, mind_wandering:p.mind_wandering,
+  })));
+  // breaths
+  BLK.Breath.forEach((b,k)=> pushRow(Object.assign({}, c, {
+    row_type:"breath", index:k+1,
+    breath_event:b.event, press_block:fmt(b.press_block), since_last_press:fmt(b.since_last_press),
+  })));
+  // raw button presses
+  BLK.Button.forEach((b,k)=> pushRow(Object.assign({}, c, {
+    row_type:"button", index:k+1,
+    press:b.press, context:b.context, time_block:fmt(b.time_block), button_RT:fmt(b.RT),
+    preceding_trial:b.preceding_trial, preceding_stimulus_name:b.preceding_stimulus_name,
+    ResponseType:b.ResponseType, Correct:b.Correct,
+  })));
+  // block summary
+  pushRow(Object.assign({}, c, {
+    row_type:"block_survey", index:1,
+    KSS:BLK.KSS, eye_report:BLK.eye_report, task_report:BLK.task_report,
+    block_duration:fmt(BLK.blockDuration), n_tones:BLK.T.length, n_standards:BLK.nStandards,
+    n_deviants:BLK.nDeviants, n_probes:BLK.Probe.length, n_breaths:BLK.Breath.length,
+    n_button_presses:BLK.Button.length, tab_blur_count:BLK.tabBlur,
+  }));
+}
+
+function buildSessionMetaRow(){
+  SESSION.endISO = new Date().toISOString();
+  return {
+    participant_id: SESSION.participant_id, session_id: SESSION.session_id, app_version: CONFIG.APP_VERSION,
+    row_type:"session_meta", index:1,
+    session_start:SESSION.startISO, session_end:SESSION.endISO,
+    total_duration: SESSION.startISO ? ((Date.parse(SESSION.endISO)-Date.parse(SESSION.startISO))/1000).toFixed(1) : "",
+    user_agent: navigator.userAgent, screen_w: screen.width, screen_h: screen.height,
+    audio_out_latency_ms: (outLatSec*1000).toFixed(1), audio_sample_rate: actx ? actx.sampleRate : "",
+    order: SESSION.order.join("|"), conditions_run: SESSION.order.length,
+    soa_sec: SOA.toFixed(6), probe_gap_min_s: CONFIG.PROBE_GAP_MIN, probe_gap_max_s: CONFIG.PROBE_GAP_MAX,
+  };
+}
+
+function fmt(x){ return (x===null || x===undefined || (typeof x==="number" && isNaN(x))) ? "" : x; }
+
+function rowsToCSV(rows){
+  const head = HEADERS.join(",");
+  const lines = rows.map(r => HEADERS.map(h => csvCell(r[h])).join(","));
+  return head + "\n" + lines.join("\n");
+}
+function csvCell(v){
+  if (v===null || v===undefined) return "";
+  let s = String(v);
+  if (typeof v==="number" && isNaN(v)) return "";
+  if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+
+function downloadBackup(){
+  const rows = SESSION.rows.concat([buildSessionMetaRow()]);
+  const csv = rowsToCSV(rows);
+  const blob = new Blob([csv], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `iWand_${SESSION.participant_id.replace(/[^a-z0-9]/gi,"_")}_${SESSION.session_id}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+
+function submitData(){
+  const metaRow = buildSessionMetaRow();
+  const rows = SESSION.rows.concat([metaRow]);
+  const payload = {
+    study: CONFIG.STUDY_NAME,
+    participant_id: SESSION.participant_id,
+    session_id: SESSION.session_id,
+    headers: HEADERS,
+    rows: rows,
+  };
+  const body = JSON.stringify(payload);
+  const endpointSet = CONFIG.DATA_ENDPOINT && /^https:\/\//.test(CONFIG.DATA_ENDPOINT);
+
+  if (!endpointSet){
+    // no endpoint configured -> safe fallback
+    finishScreen(false, "no-endpoint");
+    return;
+  }
+  // text/plain avoids a CORS preflight; no-cors lets the POST land without a readable response.
+  fetch(CONFIG.DATA_ENDPOINT, {
+    method:"POST", mode:"no-cors",
+    headers:{ "Content-Type":"text/plain;charset=UTF-8" },
+    body
+  }).then(()=> finishScreen(true))
+    .catch(()=> finishScreen(false, "network"));
+}
+
+/* ===================== END SCREENS ================================= */
+function finish(){
+  STATE.screen = "submitting"; setStage("hide");
+  exitFS();
+  show(`
+    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+    <h1>That's everything — thank you.</h1>
+    <p class="dim">Sending your responses to the researcher…</p>
+    <div class="row"><button class="btn ghost" id="dl" style="opacity:.7">Save a copy for myself</button></div>
+  `);
+  el("dl").onclick = downloadBackup;
+  submitData();
+}
+
+function finishScreen(ok, reason){
+  if (ok){
+    show(`
+      <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+      <h1>All done. Your responses were submitted.</h1>
+      <p>Thank you for your time and attention — it genuinely helps. You can close this tab now.</p>
+      <p class="small dim">If you'd like a copy of your own data, you can save one below. You don't need to send it; it's already been received.</p>
+      <div class="row"><button class="btn ghost" id="dl">Save a copy</button></div>
+    `);
+    el("dl").onclick = downloadBackup;
+  } else {
+    const why = reason === "no-endpoint"
+      ? "Automatic submission isn't configured yet."
+      : "Your responses couldn't be sent automatically (the connection failed).";
+    show(`
+      <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+      <h1>Almost there — one quick manual step</h1>
+      <p>${why} Your data is safe. Please click the button below to download the file, then email it to <strong>${esc(CONFIG.CONTACT_EMAIL)}</strong>.</p>
+      <div class="row"><button class="btn primary" id="dl">Download my data</button></div>
+      <p class="small dim" style="margin-top:14px">Thank you — this is the only manual step, and it takes a moment.</p>
+    `);
+    el("dl").onclick = downloadBackup;
+    // auto-trigger the download so nothing is lost even if they miss the button
+    setTimeout(downloadBackup, 400);
+  }
+}
+
+/* ===================== INPUT ROUTING =============================== */
+document.addEventListener("keydown", (e)=>{
+  // practice has its own handler
+  if (PRACTICE.onKey){ PRACTICE.onKey(e); return; }
+  if (STATE.screen !== "block") return;
+
+  // probe answering (any task)
+  if (STATE.runState === "probe"){
+    if (e.code === "ArrowDown"){ e.preventDefault(); recordProbeResponse(0,"DownArrow","On"); }
+    else if (e.code === "ArrowUp"){ e.preventDefault(); recordProbeResponse(1,"UpArrow","Off-nonstim"); }
+    else if (e.code === "ArrowLeft"){ e.preventDefault(); recordProbeResponse(2,"LeftArrow","Off-stim"); }
+    else if (e.code === "ArrowRight"){ e.preventDefault(); recordProbeResponse(2,"RightArrow","Off-stim"); }
+    return;
+  }
+
+  // running
+  if (STATE.runState === "running" && e.code === "Space"){
+    e.preventDefault();
+    if (BLK.isSound) handleSoundPress();
+    else handleBreathPress();
+  }
+  if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
+});
+
+function handleSoundPress(){
+  const t = performance.now();
+  // attribute to the trial whose response window contains t (last onset <= t)
+  let owner = null;
+  for (let i = BLK.T.length-1; i>=0; i--){ if (BLK.T[i].onsetPerf <= t){ owner = BLK.T[i]; break; } }
+  if (!owner) return;
+  const rt = (t - owner.onsetPerf)/1000;
+  const press = {
+    press: BLK.Button.length+1, context:"oddball_response",
+    time:t, time_block:(t-BLK.blockStartPerf)/1000, RT:rt,
+    preceding_trial:owner.trial, preceding_stimulus_name:owner.StimulusName,
+    Correct:null, ResponseType:"",
+  };
+  if (owner.isTarget && owner.Report !== 1){
+    press.Correct = 1; press.ResponseType = "hit";
+  } else if (owner.isTarget && owner.Report === 1){
+    press.Correct = 0; press.ResponseType = "extra_target_press";
+  } else {
+    press.Correct = 0; press.ResponseType = "false_alarm";
+  }
+  BLK.Button.push(press);
+
+  if (owner.Report !== 1){
+    owner.Report = 1;
+    owner.RT = rt;
+    owner.RT_off = (t - (owner.onsetPerf + CONFIG.stimDurationSecs*1000))/1000;
+    if (owner.isTarget){ owner.Correct = 1; owner.ResponseType = "hit"; }
+    else { owner.Correct = 0; owner.ResponseType = "false_alarm"; }
+  } else {
+    owner.extraPressesAfterResponse += 1;
+  }
+}
+
+function handleBreathPress(){
+  const t = performance.now();
+  const ev = BLK.Breath.length+1;
+  const breath = {
+    event: ev, press_time:t, press_block:(t-BLK.blockStartPerf)/1000,
+    since_last_press: isNaN(BLK.lastBreathPerf) ? NaN : (t - BLK.lastBreathPerf)/1000,
+  };
+  BLK.lastBreathPerf = t;
+  BLK.Breath.push(breath);
+  // also log a raw button row, mirroring B.Button
+  let preceding = BLK.T.length ? BLK.T[BLK.T.length-1] : null;
+  BLK.Button.push({
+    press: BLK.Button.length+1, context:"breath_press",
+    time:t, time_block:(t-BLK.blockStartPerf)/1000, RT:NaN,
+    preceding_trial: preceding ? preceding.trial : "", preceding_stimulus_name: preceding ? preceding.StimulusName : "",
+    Correct:null, ResponseType:"",
+  });
+}
+
+/* ===================== TAB VISIBILITY GUARD ======================= */
+document.addEventListener("visibilitychange", ()=>{
+  if (document.hidden && STATE.screen === "block" && BLK){ BLK.tabBlur += 1; }
+});
+
+/* ===================== FULLSCREEN ================================= */
+function requestFS(){ try{ const e=document.documentElement; (e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e); }catch(_){} }
+function exitFS(){ try{ if (document.fullscreenElement) (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document); }catch(_){} }
+
+/* ===================== UTILITIES ================================= */
+function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function makeSessionId(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${Math.random().toString(36).slice(2,7)}`;
+}
+function estTotalMinutes(){
+  const n = (FORCE_COND && COND_DEFS[FORCE_COND]) ? 1 : CONFIG.CONDITIONS_TO_RUN.filter(l=>COND_DEFS[l]).length;
+  const perPart = CONFIG.blockMinutes + 1.0; // + transitions/survey
+  return Math.round(n * perPart + 3);        // + instructions/practice
+}
+
+/* ===================== BOOT ====================================== */
+start();
+</script>
+</body>
+</html>
