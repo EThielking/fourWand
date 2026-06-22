@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>iWand — Behavioral Pilot</title>
+<style>
+  :root{
+    --bg:#16181c; --bg-soft:#1d2025; --panel:#23272e;
+    --ink:#e9ecf1; --ink-dim:#a4abb6; --line:#333842;
+    --accent:#6ea8fe; --accent-ink:#0c1422;
+    --good:#7bd88f; --warn:#f0c674; --bad:#e8806f;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{ background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:17px; line-height:1.6; -webkit-font-smoothing:antialiased; overflow:hidden; }
+  #app{height:100%;width:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{ width:100%; max-width:680px; background:var(--bg-soft); border:1px solid var(--line);
+    border-radius:14px; padding:34px 38px; box-shadow:0 18px 50px rgba(0,0,0,.35);
+    max-height:calc(100vh - 48px); overflow:auto; }
+  h1{font-size:25px;line-height:1.25;margin:0 0 6px;letter-spacing:-.01em}
+  h2{font-size:20px;margin:26px 0 8px;letter-spacing:-.01em}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  p{margin:0 0 14px;color:var(--ink)}
+  .dim{color:var(--ink-dim)} .small{font-size:14.5px}
+  ul{margin:0 0 14px;padding-left:20px} li{margin:6px 0}
+  .key{display:inline-block;min-width:1.9em;text-align:center;font-family:var(--mono);font-size:13px;
+    padding:2px 8px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;background:#11141a;color:var(--ink)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0}
+  button.btn{ font:inherit;font-size:16px;cursor:pointer;border-radius:10px;padding:12px 20px;border:1px solid var(--line);
+    background:var(--panel);color:var(--ink);transition:transform .04s ease,border-color .15s ease,background .15s ease; }
+  button.btn:hover{border-color:var(--accent)}
+  button.btn:active{transform:translateY(1px)}
+  button.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  button.primary:hover{filter:brightness(1.06)}
+  button.ghost{background:transparent}
+  input[type=text]{ font:inherit;font-size:16px;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);
+    background:#11141a;color:var(--ink);margin:4px 0 2px; }
+  input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  label.field{display:block;font-size:14px;color:var(--ink-dim);margin-top:10px}
+  .note{font-size:13.5px;color:var(--ink-dim);border-left:2px solid var(--line);padding:2px 0 2px 14px;margin:14px 0}
+  .scale{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 6px}
+  .scale button{flex:1 1 auto;min-width:54px}
+  .progress{font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--ink-dim);text-transform:uppercase}
+  hr{border:none;border-top:1px solid var(--line);margin:22px 0}
+  .ok{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  .choice{display:flex;flex-direction:column;gap:12px;margin:18px 0}
+  .choice button{text-align:left;padding:16px 20px}
+  .choice .big{font-size:17px;font-weight:600} .choice .sub{font-size:13.5px;color:var(--ink-dim);margin-top:2px}
+  #stage{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;z-index:50}
+  #stage.show{display:flex}
+  #stage.dark{background:#000}
+  #stage.open{background:#191b1f}
+  .fix{font-size:64px;font-weight:300;color:#cfd4dc;user-select:none}
+  .stagebig{font-size:120px;font-weight:200;color:#e9ecf1}
+  .stagetext{max-width:560px;padding:0 24px;font-size:21px;color:#e9ecf1}
+  .stagehint{margin-top:22px;font-family:var(--mono);font-size:13px;letter-spacing:.1em;color:#8a929e;text-transform:uppercase}
+  .countbeat{font-family:var(--mono);font-size:14px;color:#8a929e;margin-top:18px}
+  #overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:100;background:rgba(8,9,11,.86)}
+  #overlay.show{display:flex}
+  #overlay .ocard{background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:28px 32px;max-width:420px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+  #overlay h2{margin:0 0 8px}
+  .sumrow{padding:14px 0;border-top:1px solid var(--line)}
+  .sumrow:first-of-type{border-top:none}
+  .sumhead{font-weight:600;font-size:16px;margin-bottom:8px;letter-spacing:-.01em}
+  .sumhead .tag{font-family:var(--mono);font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.1em;margin-left:8px}
+  .mwbar{height:7px;border-radius:99px;background:#11141a;border:1px solid var(--line);overflow:hidden;margin:4px 0 10px}
+  .mwbar span{display:block;height:100%;background:var(--accent)}
+  .sumline{font-size:14.5px;margin:3px 0}
+  .sumline.dim{color:var(--ink-dim)}
+  @media (max-width:520px){ .card{padding:26px 22px} h1{font-size:22px} body{font-size:16px} }
+  @media (prefers-reduced-motion: reduce){ button.btn{transition:none} }
+  /* ===== mobile touch controls ===== */
+  body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+  button{touch-action:manipulation}
+  #touch{position:fixed;left:0;right:0;bottom:0;display:none;z-index:60}
+  #touch.show{display:flex}
+  #touch.central{justify-content:center;align-items:flex-end;padding:0 16px calc(16px + env(safe-area-inset-bottom)) 16px}
+  #touch.central #respBtn{width:100%;max-width:620px;min-height:22vh;border:none;border-radius:22px;
+    background:linear-gradient(180deg,#2b3550,#222a3f);color:#eaf0ff;font:inherit;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    box-shadow:0 10px 30px rgba(0,0,0,.42);user-select:none;touch-action:manipulation}
+  #touch.central #respBtn:active{filter:brightness(1.18)}
+  #respBtn .tlabel{font-size:19px;font-weight:600}
+  #respBtn .tsub{font-size:13px;color:#aeb9d6}
+  #touch.probe{top:0;flex-direction:column}
+  #touch.probe .qhdr{flex:0 0 auto;padding:10px 16px calc(8px + env(safe-area-inset-top)) 16px;text-align:center;font-size:14px;color:#cfd6e6;background:#15171b}
+  #touch.probe .band{flex:1 1 0;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#eaf0ff;font:inherit;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:19px;font-weight:600;
+    cursor:pointer;user-select:none;touch-action:manipulation}
+  #touch.probe .band small{font-size:13px;font-weight:400;color:#b9c2da}
+  #touch.probe .band-off{background:#3a2f4a}
+  #touch.probe .band-other{background:#34304a}
+  #touch.probe .band-on{background:#243a33;border-bottom:none}
+  #touch.probe .band:active{filter:brightness(1.28)}
+  #pauseBtn{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;display:none;z-index:70;
+    width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:rgba(20,22,28,.72);
+    color:var(--ink-dim);font-size:16px;cursor:pointer;touch-action:manipulation}
+  #pauseBtn.show{display:block}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="stage" aria-live="polite"></div>
+<div id="overlay" aria-live="assertive"></div>
+<div id="touch"></div>
+<button id="pauseBtn" aria-label="Pause">⏸</button>
+<script>
+"use strict";
+/* iWand — web behavioral collection (v2). Self-contained, no external libraries. */
+const CONFIG = {
+  DATA_ENDPOINT: "https://script.google.com/macros/s/AKfycbwiSvQQXZoHAieW-xkBY6nXkSgQT_kpM3j9V1UiTEIauoivQvfEbNTOzOLMImzApNIg/exec",
+  CONTACT_EMAIL: "esther.thielking@gmail.com",
+  STUDY_NAME:    "fourWand",
+  APP_VERSION:   "web-2.0-mobile",
+  CONDITIONS_TO_RUN: ["iEO", "iEC", "eEO", "eEC"],
+  RANDOMIZE_ORDER:   true,
+  blockMinutes:     7.33,
+  OFFER_DURATION_CHOICE: true,
+  BLOCK_MINUTES_IDEAL:   7.33,
+  BLOCK_MINUTES_SHORT:   5,
+  oddballRateHz:    1.4,
+  standardHz:       500,
+  deviantHz:        650,
+  stimDurationSecs: 0.100,
+  PROBE_GAP_MIN:    20,
+  PROBE_GAP_MAX:    30,
+  oddballChunkSize:          10,
+  nDeviantPerChunk:          2,
+  minStandardsBetweenDeviants: 2,
+  USE_SPOKEN_PROBE: true,
+  ALLOW_PAUSE_QUIT:  true,
+  SPEAK_EYES_CLOSED: false,
+  REQUIRE_FULLSCREEN: false, // fullscreen is unreliable on mobile browsers
+  SHORT_PRACTICE:     true,
+  PRACTICE_TONE_SECS: 26,
+  toneGain: 0.18,
+};
+const SOA            = 1 / CONFIG.oddballRateHz;
+const ISI            = SOA - CONFIG.stimDurationSecs;
+const RESP_WIN       = SOA;
+const STANDARD = 1, DEVIANT = 2;
+const MIN_DEV_GAP    = CONFIG.minStandardsBetweenDeviants + 1;
+let   GAP_MIN_STIM   = Math.ceil(CONFIG.PROBE_GAP_MIN / SOA);
+let   GAP_MAX_STIM   = Math.floor(CONFIG.PROBE_GAP_MAX / SOA);
+if (GAP_MAX_STIM < GAP_MIN_STIM) GAP_MAX_STIM = GAP_MIN_STIM;
+const RUN = { blockMinutes:null, blockSecs:null, nReq:null, nChunks:null, nTones:null };
+function setBlockDuration(min){
+  RUN.blockMinutes = min;
+  RUN.blockSecs    = min * 60;
+  RUN.nReq         = Math.ceil(RUN.blockSecs / SOA);
+  RUN.nChunks      = Math.ceil(RUN.nReq / CONFIG.oddballChunkSize);
+  RUN.nTones       = RUN.nChunks * CONFIG.oddballChunkSize;
+}
+setBlockDuration(CONFIG.blockMinutes);
+const COND_DEFS = {
+  iEO:{label:"iEO",eye:"EO",eyeName:"eyes open",  eyeCode:1,task:"breath",taskName:"breath",taskCode:0},
+  iEC:{label:"iEC",eye:"EC",eyeName:"eyes closed",eyeCode:0,task:"breath",taskName:"breath",taskCode:0},
+  eEO:{label:"eEO",eye:"EO",eyeName:"eyes open",  eyeCode:1,task:"sound", taskName:"sound", taskCode:1},
+  eEC:{label:"eEC",eye:"EC",eyeName:"eyes closed",eyeCode:0,task:"sound", taskName:"sound", taskCode:1},
+};
+const URLP = new URLSearchParams(location.search);
+const FORCE_COND = URLP.get("cond");
+const PREFILL_PID = URLP.get("pid") || "";
+const SESSION = {
+  participant_id: PREFILL_PID, session_id: makeSessionId(),
+  startISO: null, endISO: null, order: [], rows: [], meta: {},
+  endedEarly: false, chosenBlockMinutes: CONFIG.blockMinutes,
+};
+window.__IWAND = SESSION;
+const STATE = {
+  screen: "welcome",
+  runState: "idle",
+  prePauseRun: null, pauseKind: null,
+  task: null, eye: null,
+};
+/* ===================== AUDIO ENGINE ================================= */
+let actx = null, outLatSec = 0;
+function initAudio(){
+  if (actx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  actx = new AC({ latencyHint: "interactive" });
+  outLatSec = (typeof actx.outputLatency === "number" && actx.outputLatency > 0)
+              ? actx.outputLatency : (actx.baseLatency || 0);
+}
+function resumeAudio(){ if (actx && actx.state === "suspended") actx.resume(); }
+function audioToPerf(at){ return (at - actx.currentTime) * 1000 + performance.now() + outLatSec * 1000; }
+function scheduleTone(freq, durSec, when, gain){
+  const osc = actx.createOscillator(), g = actx.createGain();
+  osc.type = "sine"; osc.frequency.value = freq;
+  const a = 0.005, r = 0.006;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(gain, when + a);
+  g.gain.setValueAtTime(gain, when + Math.max(durSec - r, a));
+  g.gain.exponentialRampToValueAtTime(0.0001, when + durSec);
+  osc.connect(g).connect(actx.destination);
+  osc.start(when); osc.stop(when + durSec + 0.02);
+}
+function scheduleSoft(freq, durSec, when, gain){
+  const osc = actx.createOscillator(), g = actx.createGain();
+  osc.type = "sine"; osc.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(gain, when + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + durSec);
+  osc.connect(g).connect(actx.destination);
+  osc.start(when); osc.stop(when + durSec + 0.02);
+}
+function scheduleBell(when){
+  [[660,0.0],[990,0.06],[1320,0.12]].forEach(([f,off])=>{
+    const osc = actx.createOscillator(), g = actx.createGain();
+    osc.type="sine"; osc.frequency.value=f; const t=when+off;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.14,t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.9);
+    osc.connect(g).connect(actx.destination); osc.start(t); osc.stop(t+1.0);
+  });
+}
+function scheduleBeep(when, high){ scheduleSoft(high?880:560, 0.12, when, 0.12); }
+function scheduleNoiseCue(when){
+  const dur = 0.34, sr = actx.sampleRate;
+  const buf = actx.createBuffer(1, Math.max(1, Math.ceil(sr*dur)), sr);
+  const d = buf.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i] = (Math.random()*2-1);
+  const src = actx.createBufferSource(); src.buffer = buf;
+  const bp = actx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=1100; bp.Q.value=0.8;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(0.13, when+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+  src.connect(bp).connect(g).connect(actx.destination);
+  src.start(when); src.stop(when+dur+0.02);
+}
+let ttsAvailable = false;
+function initTTS(){
+  try{
+    if (!("speechSynthesis" in window)){ ttsAvailable = false; return; }
+    window.speechSynthesis.getVoices();
+    ttsAvailable = true;
+    window.speechSynthesis.onvoiceschanged = ()=>{ ttsAvailable = true; };
+  }catch(e){ ttsAvailable = false; }
+}
+function speakNow(text){
+  try{
+    if (!("speechSynthesis" in window)) return false;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0; u.lang = "en-US";
+    window.speechSynthesis.speak(u);
+    return true;
+  }catch(e){ return false; }
+}
+function speakGuidance(text){ if (CONFIG.SPEAK_EYES_CLOSED) speakNow(text); }
+function probeCue(when){
+  if (CONFIG.USE_SPOKEN_PROBE && ttsAvailable && ("speechSynthesis" in window)){
+    if (speakNow("pause")) return performance.now();
+  }
+  scheduleNoiseCue(when);
+  return audioToPerf(when);
+}
+/* ===================== SEQUENCE GENERATOR ========================== */
+function buildBlockSequence(){
+  const C = CONFIG.oddballChunkSize;
+  let seq = [], lastDevGlobal = -999;
+  for (let ichunk = 1; ichunk <= RUN.nChunks; ichunk++){
+    const pairs = [];
+    for (let p1 = 1; p1 <= C; p1++){
+      for (let p2 = p1 + MIN_DEV_GAP; p2 <= C; p2++){
+        const g1 = (ichunk - 1) * C + p1;
+        if ((g1 - lastDevGlobal) >= MIN_DEV_GAP) pairs.push([p1, p2]);
+      }
+    }
+    if (!pairs.length) throw new Error("Cannot build oddball chunk with spacing rule.");
+    const [p1, p2] = pairs[(Math.random() * pairs.length) | 0];
+    const chunk = new Array(C).fill(STANDARD);
+    chunk[p1 - 1] = DEVIANT; chunk[p2 - 1] = DEVIANT;
+    seq = seq.concat(chunk);
+    lastDevGlobal = (ichunk - 1) * C + p2;
+  }
+  return seq.slice(0, RUN.nTones);
+}
+function randGapStim(){ return GAP_MIN_STIM + ((Math.random() * (GAP_MAX_STIM - GAP_MIN_STIM + 1)) | 0); }
+function buildPracticeSeq(n){
+  const seq = new Array(n).fill(STANDARD);
+  let i = 3 + ((Math.random()*2)|0);
+  while (i < n-2){ seq[i] = DEVIANT; i += MIN_DEV_GAP + 1 + ((Math.random()*3)|0); }
+  if (n>=2){ seq[n-1]=STANDARD; seq[n-2]=STANDARD; }
+  return seq;
+}
+/* ===================== UI HELPERS ================================== */
+const app = document.getElementById("app");
+const stage = document.getElementById("stage");
+const overlay = document.getElementById("overlay");
+function show(html){ app.innerHTML = `<div class="card">${html}</div>`; app.scrollTop = 0; }
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function setStage(mode, inner){
+  stage.className = "";
+  if (mode === "hide"){ stage.classList.remove("show"); stage.innerHTML = ""; return; }
+  stage.classList.add("show", mode); stage.innerHTML = inner || "";
+}
+function showOverlay(html){ overlay.innerHTML = `<div class="ocard">${html}</div>`; overlay.classList.add("show"); }
+function hideOverlay(){ overlay.classList.remove("show"); overlay.innerHTML = ""; }
+
+/* ===================== MOBILE: device, wake lock, touch =========== */
+function deviceType(){
+  try{
+    const ua = navigator.userAgent || "";
+    const coarse = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+    const touchPts = (navigator.maxTouchPoints || 0) > 1;
+    const mobUA = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i.test(ua);
+    const iPadOS = /Macintosh/.test(ua) && touchPts;
+    return (mobUA || iPadOS || (coarse && touchPts)) ? "mobile" : "desktop";
+  }catch(e){ return "desktop"; }
+}
+let wakeLock = null;
+async function acquireWake(){ try{ if ("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); } }catch(e){} }
+function releaseWake(){ try{ if (wakeLock){ wakeLock.release(); wakeLock = null; } }catch(e){} }
+const touch = document.getElementById("touch");
+const pauseBtn = document.getElementById("pauseBtn");
+function hideTouch(){ touch.className = ""; touch.innerHTML = ""; }
+function centralLabel(isSound){ return isSound ? "Tap for each target beep" : "Tap at the end of each exhale"; }
+function centralSub(isSound){ return isSound ? "(the higher beep)" : "(one tap per exhale)"; }
+function renderCentral(onPress, label, sub){
+  touch.className = "show central";
+  touch.innerHTML = '<button class="tapbtn" id="respBtn"><span class="tlabel">'+label+'</span>'+(sub?'<span class="tsub">'+sub+'</span>':'')+'</button>';
+  const b = document.getElementById("respBtn");
+  b.addEventListener("pointerdown", function(e){ e.preventDefault(); resumeAudio(); onPress(); }, {passive:false});
+}
+function renderProbeBands(onPress){
+  touch.className = "show probe";
+  touch.innerHTML =
+    '<div class="qhdr">Where was your attention, just before? &mdash; tap one</div>'+
+    '<button class="band band-off" data-code="1">Off task<small>mind wandered to something unrelated</small></button>'+
+    '<button class="band band-other" data-code="2">Off task<small>caught up in the other activity</small></button>'+
+    '<button class="band band-on" data-code="0">On task<small>focused on the task</small></button>';
+  const map = { "0":["DownArrow","On"], "1":["UpArrow","Off-nonstim"], "2":["LeftArrow","Off-stim"] };
+  const bands = touch.querySelectorAll(".band");
+  for (let i=0;i<bands.length;i++){
+    bands[i].addEventListener("pointerdown", function(e){
+      e.preventDefault(); resumeAudio();
+      const c = this.getAttribute("data-code"); const m = map[c];
+      onPress(+c, m[0], m[1]);
+    }, {passive:false});
+  }
+}
+function showPauseBtn(){ pauseBtn.className = "show"; }
+function hidePauseBtn(){ pauseBtn.className = ""; }
+pauseBtn.addEventListener("pointerdown", function(e){ e.preventDefault(); if (STATE.screen==="block" && STATE.runState!=="paused") pauseBlock("menu"); });
+function renderMenuOverlay(){
+  showOverlay(`
+    <h2>Paused</h2>
+    <p class="small dim">Your place is held. Resume when you're ready, or stop here &mdash; either way your data so far is saved.</p>
+    <div class="row" style="justify-content:center;margin-top:6px">
+      <button class="btn primary" id="ovResume3">Resume</button>
+      <button class="btn" id="ovQuit3">Save &amp; quit</button>
+    </div>
+  `);
+  el("ovResume3").onclick = resumeBlock;
+  el("ovQuit3").onclick = quitNow;
+}
+
+/* ===================== SCREEN FLOW ================================= */
+function start(){
+  if (FORCE_COND && COND_DEFS[FORCE_COND]) SESSION.order = [FORCE_COND];
+  else {
+    let labels = CONFIG.CONDITIONS_TO_RUN.filter(l => COND_DEFS[l]);
+    if (CONFIG.RANDOMIZE_ORDER) labels = shuffle(labels.slice());
+    SESSION.order = labels;
+  }
+  screenWelcome();
+}
+function screenWelcome(){
+  STATE.screen = "welcome";
+  show(`
+    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+    <h1>Thanks for helping us pilot this study about our natural fluctuations in attention</h1>
+    <p class="dim small">It takes roughly <strong>${esc(estRangeText())}</strong> in total, split into four shorter blocks (you'll pick the length on the next screen). You can take breaks after each block. It runs entirely in this tab, and your responses are sent to the researcher automatically at the end.</p>
+    <h2>Before you start</h2>
+    <ul class="small">
+      <li><strong>Use headphones</strong> if you can, in a quiet room where you won't be interrupted.</li>
+      <li>Hold your <strong>phone</strong> comfortably &mdash; you'll respond with large on-screen buttons.</li>
+      <li><strong>Turn off silent mode</strong> and turn your volume up, so you can hear the beeps clearly.</li>
+      <li>Keep the screen on; the study tries to stop it sleeping, but please don't lock it mid-block.</li>
+      <li>Silence notifications and close other tabs.</li>
+    </ul>
+    <label class="field" for="pid">Your name or initials (so the researcher knows whose data this is)</label>
+    <input id="pid" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. Alex R" value="${esc(SESSION.participant_id)}" />
+    <div id="pidErr" class="small bad" style="min-height:18px"></div>
+    <hr/>
+    <h2 class="small" style="margin-top:0">Quick sound check</h2>
+    <p class="small dim">Press play and adjust your volume so the beeps are clearly audible but comfortable. You'll hear the two beep types you'll be listening for, plus the spoken "pause" that marks a probe.</p>
+    <div class="row">
+      <button class="btn" id="testStd">Play standard beep</button>
+      <button class="btn" id="testDev">Play target beep</button>
+      <button class="btn" id="testProbe">Play probe</button>
+    </div>
+    <label class="small" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px">
+      <input type="checkbox" id="heard" style="margin-top:5px"/>
+      <span>I can hear the beeps clearly.</span>
+    </label>
+    <div class="row" style="margin-top:18px">
+      <button class="btn primary" id="go">Continue</button>
+    </div>
+  `);
+  el("testStd").onclick = ()=>{ initAudio(); resumeAudio(); scheduleTone(CONFIG.standardHz, CONFIG.stimDurationSecs, actx.currentTime+0.05, CONFIG.toneGain); };
+  el("testDev").onclick = ()=>{ initAudio(); resumeAudio(); scheduleTone(CONFIG.deviantHz, CONFIG.stimDurationSecs, actx.currentTime+0.05, CONFIG.toneGain); };
+  el("testProbe").onclick = ()=>{ initAudio(); resumeAudio(); initTTS(); probeCue(actx.currentTime+0.05); };
+  el("go").onclick = ()=>{
+    const pid = el("pid").value.trim();
+    if (pid.length < 1){ el("pidErr").textContent = "Please enter your name or initials."; return; }
+    if (!el("heard").checked){ el("pidErr").textContent = "Please confirm you can hear the beeps."; return; }
+    SESSION.participant_id = pid;
+    initAudio(); resumeAudio(); initTTS();
+    if (CONFIG.REQUIRE_FULLSCREEN) requestFS();
+    SESSION.startISO = new Date().toISOString();
+    if (CONFIG.OFFER_DURATION_CHOICE && !(FORCE_COND && COND_DEFS[FORCE_COND])) screenDurationChoice();
+    else screenOverview();
+  };
+}
+function screenDurationChoice(){
+  STATE.screen = "duration";
+  const nC = SESSION.order.length;
+  const tot = m => Math.round(nC*(m+1) + 3);
+  show(`
+    <p class="eyebrow">choose your length</p>
+    <h1>How much time do you have?</h1>
+    <p>Each of the ${nC} blocks can run at one of two lengths. Longer blocks give us cleaner data, but either is genuinely helpful — pick what you can commit to fully.</p>
+    <div class="choice">
+      <button class="btn" id="optIdeal">
+        <div class="big">${esc(CONFIG.BLOCK_MINUTES_IDEAL)} minutes per block · ideal</div>
+        <div class="sub">About ${tot(CONFIG.BLOCK_MINUTES_IDEAL)} minutes total</div>
+      </button>
+      <button class="btn" id="optShort">
+        <div class="big">${esc(CONFIG.BLOCK_MINUTES_SHORT)} minutes per block · shorter</div>
+        <div class="sub">About ${tot(CONFIG.BLOCK_MINUTES_SHORT)} minutes total</div>
+      </button>
+    </div>
+    <p class="small dim">Whichever you choose, please try to finish each block in one sitting.</p>
+  `);
+  el("optIdeal").onclick = ()=>{ setBlockDuration(CONFIG.BLOCK_MINUTES_IDEAL); SESSION.chosenBlockMinutes = CONFIG.BLOCK_MINUTES_IDEAL; screenOverview(); };
+  el("optShort").onclick = ()=>{ setBlockDuration(CONFIG.BLOCK_MINUTES_SHORT); SESSION.chosenBlockMinutes = CONFIG.BLOCK_MINUTES_SHORT; screenOverview(); };
+}
+function screenOverview(){
+  STATE.screen = "overview";
+  const nC = SESSION.order.length;
+  show(`
+    <p class="eyebrow">how it works</p>
+    <h1>What you'll do</h1>
+    <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, back to back, each about <strong>${esc(RUN.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
+    <p>In every part, soft beeps play at a steady pace. There are two kinds of part:</p>
+    <ul>
+      <li><strong>Sound tasks</strong> — you respond to a specific beep.</li>
+      <li><strong>Breath tasks</strong> — you ignore the beeps and follow your breathing.</li>
+    </ul>
+    <p>Some parts are done with your <strong>eyes open</strong>, some with your <strong>eyes closed</strong>. Each part begins with its own short reminder of what to do, so you don't need to memorize everything now.</p>
+    <div class="note">Throughout, the beeps will occasionally pause and you'll hear the spoken word <em>"pause"</em> — this is our <strong>experience-sampling probe</strong> (we'll just call it the <em>probe</em>). When you hear it, you'll use the arrow keys to report where your attention was in the moment <strong>just</strong> before the probe. The next screen explains this — it's important you understand it before starting.</div>
+    <div class="row"><button class="btn primary" id="next">Next</button></div>
+  `);
+  el("next").onclick = screenProbeInstructions;
+}
+function screenProbeInstructions(){
+  STATE.screen = "probeInfo";
+  show(`
+    <p class="eyebrow">the probe</p>
+    <h1>Reporting your attention</h1>
+    <p>At random points the beeps briefly pause and you'll hear the spoken word <em>"pause"</em> — the probe. The instant before it, your mind was <em>somewhere</em>. Answer honestly with one arrow key — there are no right answers, and drifting off is completely normal and expected.</p>
+    <h2>The three responses</h2>
+    <ul>
+      <li><strong>On task</strong> — you were focused on the task (the beeps, or your breath).</li>
+      <li><strong>Off task</strong> — your mind had wandered to something <em>unrelated</em> (a thought, a memory, the room).</li>
+      <li><strong>Off task, on the other thing</strong> — you'd drifted, but specifically onto the <em>other</em> activity: caught up in your breathing during the sound task, or caught up in the beeps during the breath task.</li>
+      <li class="dim small">When the probe sounds, three large buttons fill the screen &mdash; tap the one that matches.</li>
+    </ul>
+    <p>NOTE: Answer based on your experience in the moments JUST before the probe, rather than whether your attention drifted at any point since the previous probe. Suppose that after the previous probe you resumed the sound task, caught yourself thinking about a TV show, then returned to focus and were interrupted by the probe. Your response should indicate on-task focus by tapping <strong>On task</strong>.</p>
+    <div class="note">Example: Suppose you hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since you were focused on something unrelated to the task just before the probe, classify this as off-task and tap <strong>Off task</strong>.</div>
+    <p class="small dim">During eyes-closed parts you'll keep your eyes shut and answer from memory of the three buttons (top = off task, middle = off task on the other activity, bottom = on task); during eyes-open parts you'll keep your eyes on a fixation point. So please get comfortable with these response options now.</p>
+    <p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
+    <div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
+  `);
+  el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
+}
+/* ---------------------- PRACTICE (30s each, ends with a required probe) ---- */
+function screenPracticeIntro(){
+  STATE.screen = "practiceIntro";
+  show(`
+    <p class="eyebrow">practice · 1 of 2</p>
+    <h1>Practice the sound task</h1>
+    <p>You'll hear a stream of beeps. Most are the <strong>standard</strong> beep (lower). Once in a while a <strong>target</strong> beep plays (higher). Tap the big button as quickly as you can whenever you hear a <em>target</em>. Do nothing for the standards.</p>
+    <p>This runs about <strong>30 seconds</strong>, and ends with a real <em>probe</em> — when you hear "pause," report your attention by tapping one of three buttons. You'll need to answer it to continue.</p>
+    <p class="small dim">Keep a thumb near the button.</p>
+    <div class="row"><button class="btn primary" id="go">Start practice</button></div>
+  `);
+  el("go").onclick = ()=> runPractice("sound", soundPracticeResult);
+}
+function soundPracticeResult(stats){
+  show(`
+    <p class="eyebrow">practice · 1 of 2</p>
+    <h1>Nice.</h1>
+    <p>You caught <strong>${stats.hits} of ${stats.targets}</strong> target beeps${stats.fa>0?`, with ${stats.fa} press${stats.fa>1?"es":""} on a standard`:""}, and you answered the probe with <strong>${esc(stats.probeText||"—")}</strong>. In the real task, just aim to tap quickly on the higher beep and let the standards go by.</p>
+    <div class="row">
+      <button class="btn ghost" id="again">Repeat</button>
+      <button class="btn primary" id="next">Continue to breath practice</button>
+    </div>
+  `);
+  el("again").onclick = ()=> runPractice("sound", soundPracticeResult);
+  el("next").onclick = screenBreathPracticeIntro;
+}
+function screenBreathPracticeIntro(){
+  STATE.screen = "practiceBreathIntro";
+  show(`
+    <p class="eyebrow">practice · 2 of 2</p>
+    <h1>Practice the breath task</h1>
+    <p>Breathe naturally. Each time you finish breathing <em>out</em>, tap the big button once — one tap per exhale. The same beeps keep playing but are irrelevant to the breath task; let them fade into the background.</p>
+    <p>This runs about <strong>30 seconds</strong> and also ends with a <em>probe</em> — answer it by tapping a button to continue.</p>
+    <div class="row"><button class="btn primary" id="go">Start practice</button></div>
+  `);
+  el("go").onclick = ()=> runPractice("breath", breathPracticeResult);
+}
+function breathPracticeResult(stats){
+  show(`
+    <p class="eyebrow">practice · 2 of 2</p>
+    <h1>You've got it.</h1>
+    <p>You marked <strong>${stats.breaths} breath${stats.breaths!==1?"s":""}</strong> and answered the probe with <strong>${esc(stats.probeText||"—")}</strong>. Breathe naturally and tap right at the end of each exhale.</p>
+    <p class="dim small">Remember: when the probe sounds, tap <strong>On task</strong>, <strong>Off task</strong>, or <strong>Off &mdash; other thing</strong>.</p>
+    <div class="row">
+      <button class="btn ghost" id="again">Repeat</button>
+      <button class="btn primary" id="next">I'm ready to begin the study</button>
+    </div>
+  `);
+  el("again").onclick = ()=> runPractice("breath", breathPracticeResult);
+  el("next").onclick = firstConditionGate;
+}
+const PRACTICE = { onKey: null, mode: null };
+function runPractice(task, onDone){
+  STATE.screen = "practiceRun"; STATE.runState = "running"; STATE.task = task;
+  const isSound = task === "sound";
+  setStage("open", `<div class="fix">+</div>`);
+  const nT = Math.max(8, Math.floor(CONFIG.PRACTICE_TONE_SECS / SOA));
+  const seq = buildPracticeSeq(nT);
+  const t0 = actx.currentTime + 0.5;
+  const onsets = [];
+  for (let i=0;i<nT;i++){
+    const isTarget = seq[i]===DEVIANT;
+    const when = t0 + i*SOA;
+    scheduleTone(isTarget?CONFIG.deviantHz:CONFIG.standardHz, CONFIG.stimDurationSecs, when, CONFIG.toneGain);
+    onsets.push({when, isTarget});
+  }
+  const stats = { hits:0, fa:0, targets: seq.filter(x=>x===DEVIANT).length, breaths:0, probeText:null };
+  PRACTICE.mode = "task";
+  PRACTICE.onKey = (e)=>{
+    if (PRACTICE.mode === "task" && e.code === "Space"){
+      e.preventDefault();
+      const t = performance.now();
+      if (isSound){
+        let k=-1; for (let i=0;i<onsets.length;i++){ if (audioToPerf(onsets[i].when) <= t) k = i; }
+        if (k>=0){ if (onsets[k].isTarget) stats.hits++; else stats.fa++; }
+      } else { stats.breaths++; }
+    } else if (PRACTICE.mode === "probe"){
+      let code=null, txt=null;
+      if (e.code==="ArrowDown"){ code=0; txt="On task"; }
+      else if (e.code==="ArrowUp"){ code=1; txt="Off task"; }
+      else if (e.code==="ArrowLeft" || e.code==="ArrowRight"){ code=2; txt="Off task (other thing)"; }
+      if (code!==null){ e.preventDefault(); stats.probeText = txt; PRACTICE.mode="done"; endPractice(); }
+    }
+  };
+  renderCentral(()=>PRACTICE.onKey({code:"Space",preventDefault(){}}), centralLabel(isSound), centralSub(isSound));
+  const lastOnset = t0 + (nT-1)*SOA;
+  const watcher = setInterval(()=>{
+    if (PRACTICE.mode !== "task") { clearInterval(watcher); return; }
+    if (actx.currentTime >= lastOnset + SOA){
+      clearInterval(watcher);
+      PRACTICE.mode = "probe";
+      probeCue(actx.currentTime + 0.05);
+      setStage("open", "");
+      renderProbeBands((code,key,resp)=>{ const cm={0:"ArrowDown",1:"ArrowUp",2:"ArrowLeft"}; PRACTICE.onKey({code:cm[code],preventDefault(){}}); });
+    }
+  }, 40);
+  function endPractice(){
+    PRACTICE.onKey = null; PRACTICE.mode = null; STATE.runState = "idle"; hideTouch(); setStage("hide");
+    onDone(stats);
+  }
+}
+/* ---------------------- CONDITION SEQUENCE ---------------------- */
+let condIndex = 0;
+function firstConditionGate(){ condIndex = 0; nextConditionIntro(); }
+function nextConditionIntro(){
+  if (condIndex >= SESSION.order.length){ return finish(); }
+  const def = COND_DEFS[SESSION.order[condIndex]];
+  STATE.screen = "condIntro"; STATE.task = def.task; STATE.eye = def.eye;
+  const isSound = def.task === "sound";
+  const isClosed = def.eye === "EC";
+  const taskBlock = isSound
+    ? `<ul>
+         <li>Listen for the <strong>higher target beep</strong> among the lower standards, and tap the big button as QUICKLY as you can on each <strong>target</strong>. Do not respond to the standards. When on task, your attention is focused on listening to each sound as it arises — responding as fast as possible to targets and withholding responses to standards.</li>
+       </ul>`
+    : `<ul>
+         <li>Breathe naturally and tap the big button once at the end of each <strong>exhale</strong>, before your inhale. When on task, your attention is on the sensations of your breath — staying aware of each inhale and exhale, and being precise with the button press. Imagine the experimenters are also physiologically tracking your true inhale/exhale timing for comparison.</li>
+         <li>The same beeps keep playing, but they are irrelevant for this task.</li>
+       </ul>`;
+  const eyeBlock = isClosed
+    ? `<div class="note"><strong>Eyes closed.</strong> Rest a thumb near the big button at the bottom (that is your response). When the probe sounds, three buttons fill the screen: top is off task, middle is off task on the other activity, bottom is on task. When you press start you'll hear a 5-second countdown — then close your eyes and keep them shut until the <em>chime</em> at the end of the block. Answer the probes by feel, using those three areas of the screen.</div>`
+    : `<div class="note"><strong>Eyes open.</strong> Keep your gaze relaxed on the <strong>+</strong> in the centre of the screen — and keep your eyes on the <strong>+</strong> the whole time, including while you press keys to respond to the beeps and the probes.</div>`;
+  const ctrlLine = CONFIG.ALLOW_PAUSE_QUIT
+    ? `<p class="small dim">If you must, tap the <strong>⏸</strong> button (top-right) to pause or stop early &mdash; otherwise, please keep going until the chime.</p>` : "";
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length}</p>
+    <h1>${isSound ? "Sound task" : "Breath task"} — ${isClosed ? "eyes closed" : "eyes open"}</h1>
+    ${taskBlock}
+    ${eyeBlock}
+    <p class="small dim">The probe is the same as before: tap <strong>On task</strong>, <strong>Off task</strong>, or <strong>Off &mdash; other thing</strong> when the probe sounds. Roughly ${esc(RUN.blockMinutes)} minutes.</p>
+    ${ctrlLine}
+    <div class="row"><button class="btn primary" id="ready">Start this part</button></div>
+  `);
+  el("ready").onclick = ()=> countdownThenBlock(def);
+}
+function countdownThenBlock(def){
+  STATE.screen = "countdown";
+  resumeAudio();
+  const isClosed = def.eye === "EC";
+  const lead = 0.25;
+  const startBeep = actx.currentTime + lead;
+  for (let i=0;i<5;i++) scheduleBeep(startBeep + i*1.0, i===4);
+  const blockStartAudio = startBeep + 5*1.0;
+  if (isClosed){
+    setStage("dark", `<div class="stagetext">Close your eyes now.</div><div class="countbeat">starting…</div>`);
+    speakGuidance("Close your eyes and keep them closed until you hear the chime.");
+  } else {
+    setStage("open", `<div class="stagebig" id="cnum">5</div><div class="countbeat">get ready</div>`);
+  }
+  let n = 5;
+  const vi = setInterval(()=>{
+    n--;
+    if (!isClosed && el("cnum")) el("cnum").textContent = n > 0 ? String(n) : "+";
+    if (n <= 0){ clearInterval(vi); }
+  }, 1000);
+  waitUntilAudio(blockStartAudio, ()=> runBlock(def, blockStartAudio));
+}
+function waitUntilAudio(at, cb){
+  const iv = setInterval(()=>{ if (actx.currentTime >= at){ clearInterval(iv); cb(); } }, 15);
+}
+/* ===================== THE BLOCK (core engine) ===================== */
+let BLK = null, schedTimer = null;
+function runBlock(def, blockStartAudio){
+  STATE.screen = "block"; STATE.runState = "running"; STATE.task = def.task; STATE.eye = def.eye;
+  const isSound = def.task === "sound";
+  const isClosed = def.eye === "EC";
+  if (isClosed) setStage("dark", "");
+  else setStage("open", `<div class="fix">+</div>`);
+  BLK = {
+    def, isSound, isClosed,
+    seq: buildBlockSequence(),
+    stimIndex: 0,
+    blockStartAudio,
+    blockStartPerf: audioToPerf(blockStartAudio),
+    blockEndAudio: blockStartAudio + RUN.blockSecs,
+    nextToneTime: blockStartAudio,
+    stimSinceProbe: 0, nextProbeGapStim: randGapStim(),
+    T: [], Probe: [], Breath: [], Button: [],
+    nStandards: 0, nDeviants: 0,
+    lastBreathPerf: NaN, tabBlur: 0, ended: false, aborted: false,
+    pauseCount: 0, pausedMs: 0, _pauseStart: null,
+    KSS: NaN, eye_report: NaN, task_report: NaN,
+  };
+  acquireWake(); showPauseBtn();
+  renderCentral(BLK.isSound?handleSoundPress:handleBreathPress, centralLabel(BLK.isSound), centralSub(BLK.isSound));
+  schedTimer = setInterval(schedulerTick, 25);
+}
+function schedulerTick(){
+  if (!BLK || STATE.runState !== "running") return;
+  const now = actx.currentTime;
+  if (now >= BLK.blockEndAudio || BLK.stimIndex >= BLK.seq.length){
+    finalizeActiveTrial(); endBlock(); return;
+  }
+  const lookahead = now + 0.12;
+  while (BLK.nextToneTime < lookahead){
+    if (BLK.nextToneTime >= BLK.blockEndAudio || BLK.stimIndex >= BLK.seq.length){
+      finalizeActiveTrial(); endBlock(); return;
+    }
+    if (probeDue()){ insertProbe(); return; }
+    scheduleNextTone();
+  }
+}
+function probeDue(){
+  if (BLK.T.length < 2) return false;
+  if (BLK.stimSinceProbe < BLK.nextProbeGapStim) return false;
+  const a = BLK.T[BLK.T.length-1], b = BLK.T[BLK.T.length-2];
+  if (!(a.isStandard && b.isStandard)) return false;
+  const i = BLK.stimIndex;
+  if (i+1 >= BLK.seq.length) return false;
+  return BLK.seq[i] === STANDARD && BLK.seq[i+1] === STANDARD;
+}
+function scheduleNextTone(){
+  finalizeActiveTrial();
+  const i = BLK.stimIndex, stim = BLK.seq[i], isTarget = stim === DEVIANT, when = BLK.nextToneTime;
+  scheduleTone(isTarget ? CONFIG.deviantHz : CONFIG.standardHz, CONFIG.stimDurationSecs, when, CONFIG.toneGain);
+  const onsetPerf = audioToPerf(when);
+  const tr = {
+    trial: BLK.T.length + 1, sequence_index: i + 1, Stimulus: stim,
+    StimulusName: isTarget ? "deviant" : "standard",
+    isStandard: stim === STANDARD ? 1 : 0, isDeviant: isTarget ? 1 : 0, isTarget: isTarget ? 1 : 0,
+    onsetPerf, stimOn_block: (onsetPerf - BLK.blockStartPerf) / 1000, SOA, ISI,
+    realizedToneISI: BLK.T.length ? (onsetPerf - BLK.T[BLK.T.length-1].onsetPerf)/1000 : NaN,
+    Report: BLK.isSound ? 0 : null, Correct: null, ResponseType: "",
+    RT: NaN, RT_off: NaN, extraPressesAfterResponse: 0, finalized: false,
+  };
+  BLK.T.push(tr); BLK.activeTrial = tr;
+  BLK.nStandards += tr.isStandard; BLK.nDeviants += tr.isDeviant;
+  BLK.stimSinceProbe += 1; BLK.stimIndex += 1; BLK.nextToneTime = when + SOA;
+}
+function finalizeActiveTrial(){
+  const tr = BLK && BLK.activeTrial;
+  if (!tr || tr.finalized) return;
+  if (BLK.isSound && tr.Report === 0){
+    if (tr.isTarget){ tr.Correct = 0; tr.ResponseType = "miss"; }
+    else { tr.Correct = 1; tr.ResponseType = "correct_reject"; }
+  }
+  tr.finalized = true;
+}
+function insertProbe(){
+  STATE.runState = "probe";
+  const when = BLK.nextToneTime;
+  const probeOnPerf = probeCue(when);
+  const pr = {
+    probe: BLK.Probe.length + 1,
+    plannedGapStim: BLK.nextProbeGapStim, plannedGapSecs: BLK.nextProbeGapStim * SOA,
+    actualGapStim: BLK.stimSinceProbe, actualGapSecs: BLK.stimSinceProbe * SOA,
+    probeOnPerf, probeOn_block: (probeOnPerf - BLK.blockStartPerf)/1000,
+    RT: NaN, response_key: "", response_text: "", mind_wandering: NaN, answered: false,
+  };
+  BLK.Probe.push(pr); BLK.activeProbe = pr;
+  if (!BLK.isClosed){
+    setStage("open", `
+      <div class="stagetext">Where was your attention, just before the probe?</div>
+      <div class="stagehint" style="margin-top:26px">
+        <span class="key">&darr;</span> on task &nbsp;·&nbsp;
+        <span class="key">&uarr;</span> off task &nbsp;·&nbsp;
+        <span class="key">&larr;</span>/<span class="key">&rarr;</span> off task, on the other thing
+      </div>`);
+  } else {
+    setStage("dark", "");
+  }
+  renderProbeBands(recordProbeResponse);
+}
+function recordProbeResponse(code, keyName, text){
+  const pr = BLK.activeProbe;
+  if (!pr || pr.answered) return;
+  const t = performance.now();
+  pr.RT = (t - pr.probeOnPerf)/1000;
+  pr.response_key = keyName; pr.response_text = text; pr.mind_wandering = code; pr.answered = true;
+  BLK.stimSinceProbe = 0; BLK.nextProbeGapStim = randGapStim();
+  BLK.nextToneTime = actx.currentTime + SOA;
+  if (BLK.isClosed) setStage("dark", "");
+  else setStage("open", `<div class="fix">+</div>`);
+  if (actx.currentTime >= BLK.blockEndAudio){ finalizeActiveTrial(); endBlock(); }
+  else { STATE.runState = "running"; renderCentral(BLK.isSound?handleSoundPress:handleBreathPress, centralLabel(BLK.isSound), centralSub(BLK.isSound)); }
+}
+function endBlock(){
+  if (!BLK || BLK.ended) return;
+  BLK.ended = true; STATE.runState = "idle";
+  hideTouch(); hidePauseBtn(); releaseWake();
+  clearInterval(schedTimer); schedTimer = null;
+  BLK.blockEndPerf = performance.now();
+  BLK.blockDuration = (BLK.blockEndPerf - BLK.blockStartPerf)/1000;
+  scheduleBell(actx.currentTime + 0.05);
+  speakGuidance("You can open your eyes now.");
+  setTimeout(surveyKSS, 700);
+}
+/* ===================== PAUSE / QUIT ============================== */
+function pauseBlock(kind){
+  if (!BLK || BLK.ended) return;
+  if (STATE.runState === "paused"){ if (kind==="quit") openQuitMenu(); return; }
+  STATE.prePauseRun = STATE.runState;
+  STATE.runState = "paused"; STATE.pauseKind = kind;
+  BLK._pauseStart = performance.now();
+  try{ actx.suspend(); }catch(e){}
+  try{ if (window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+  if (kind === "quit") renderQuitOverlay();
+  else if (kind === "menu") renderMenuOverlay();
+  else renderPauseOverlay();
+  if (BLK.isClosed) speakNow(kind==="quit" ? "Stop early? Open your eyes to choose." : "Paused. Press P to resume.");
+}
+function renderPauseOverlay(){
+  showOverlay(`
+    <h2>Paused</h2>
+    <p class="small dim">Take a moment. Your place is held.</p>
+    <div class="row" style="justify-content:center"><button class="btn primary" id="ovResume">Resume</button></div>
+    <p class="small dim" style="margin-top:12px">Press <span class="key">P</span> to resume · <span class="key">Esc</span> to stop early</p>
+  `);
+  el("ovResume").onclick = resumeBlock;
+}
+function renderQuitOverlay(){
+  showOverlay(`
+    <h2>Stop early?</h2>
+    <p class="small dim">Your progress so far will still be saved and sent. You can also resume where you left off.</p>
+    <div class="row" style="justify-content:center;margin-top:6px">
+      <button class="btn" id="ovResume2">Resume</button>
+      <button class="btn primary" id="ovQuit">Save &amp; quit</button>
+    </div>
+  `);
+  el("ovResume2").onclick = resumeBlock;
+  el("ovQuit").onclick = quitNow;
+}
+function openQuitMenu(){
+  if (!BLK || BLK.ended) return;
+  if (STATE.runState !== "paused"){ pauseBlock("quit"); return; }
+  STATE.pauseKind = "quit"; renderQuitOverlay();
+}
+function resumeBlock(){
+  if (STATE.runState !== "paused") return;
+  hideOverlay();
+  try{ actx.resume(); }catch(e){}
+  if (BLK && BLK._pauseStart != null){
+    BLK.pausedMs += (performance.now() - BLK._pauseStart);
+    BLK.pauseCount += 1; BLK._pauseStart = null;
+  }
+  if (CONFIG.REQUIRE_FULLSCREEN && !document.fullscreenElement) requestFS();
+  STATE.runState = STATE.prePauseRun || "running";
+  STATE.pauseKind = null;
+}
+function quitNow(){
+  hideOverlay();
+  try{ actx.resume(); }catch(e){}
+  if (BLK && BLK._pauseStart != null){
+    BLK.pausedMs += (performance.now() - BLK._pauseStart);
+    BLK.pauseCount += 1; BLK._pauseStart = null;
+  }
+  if (BLK && !BLK.ended){
+    finalizeActiveTrial();
+    BLK.ended = true;
+    if (schedTimer){ clearInterval(schedTimer); schedTimer = null; }
+    BLK.blockEndPerf = performance.now();
+    BLK.blockDuration = (BLK.blockEndPerf - BLK.blockStartPerf)/1000;
+    BLK.aborted = true;
+    flattenBlockToRows();
+  }
+  SESSION.endedEarly = true;
+  STATE.runState = "idle";
+  finish();
+}
+/* ===================== POST-BLOCK SURVEY =========================== */
+function surveyKSS(){
+  STATE.screen = "kss"; setStage("hide");
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length} · check-out</p>
+    <h1>Your sleepiness during the last part of that block was:</h1>
+    <p class="dim small">Pick the number that best fits the last moments before the chime.</p>
+    <div class="scale" id="kssScale"></div>
+    <div class="small dim" style="display:flex;justify-content:space-between;margin-top:2px">
+      <span>1 · extremely alert</span><span>9 · fighting sleep</span>
+    </div>
+    <div id="kssLabels" class="small" style="margin-top:14px;color:var(--ink-dim)"></div>
+  `);
+  const labels = ["extremely alert","very alert","alert","rather alert",
+    "neither alert nor sleepy","some signs of sleepiness","sleepy, no effort to stay awake",
+    "sleepy, some effort to stay awake","very sleepy, fighting sleep"];
+  const wrap = el("kssScale");
+  for (let i=1;i<=9;i++){
+    const b = document.createElement("button");
+    b.className = "btn"; b.textContent = i;
+    b.onmouseenter = ()=> el("kssLabels").textContent = i + " — " + labels[i-1];
+    b.onfocus = b.onmouseenter;
+    b.onclick = ()=>{ BLK.KSS = i; surveyEye(); };
+    wrap.appendChild(b);
+  }
+}
+function surveyEye(){
+  STATE.screen = "eyeRep";
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length} · check-out</p>
+    <h1>During that part, were your eyes open or closed?</h1>
+    <div class="row">
+      <button class="btn" id="open">Open</button>
+      <button class="btn" id="closed">Closed</button>
+    </div>
+  `);
+  el("open").onclick = ()=>{ BLK.eye_report = 1; surveyTask(); };
+  el("closed").onclick = ()=>{ BLK.eye_report = 0; surveyTask(); };
+}
+function surveyTask(){
+  STATE.screen = "taskRep";
+  show(`
+    <p class="progress">Part ${condIndex+1} of ${SESSION.order.length} · check-out</p>
+    <h1>Which task were you doing?</h1>
+    <div class="row">
+      <button class="btn" id="sound">Listening for the target beep</button>
+      <button class="btn" id="breath">Following my breath</button>
+    </div>
+  `);
+  el("sound").onclick = ()=>{ BLK.task_report = 1; finishBlock(); };
+  el("breath").onclick = ()=>{ BLK.task_report = 0; finishBlock(); };
+}
+function finishBlock(){
+  flattenBlockToRows();
+  condIndex++;
+  if (condIndex >= SESSION.order.length){ finish(); return; }
+  STATE.screen = "break";
+  show(`
+    <p class="progress">Part ${condIndex} of ${SESSION.order.length} complete</p>
+    <h1>Take a breather</h1>
+    <p>Continue when you're ready for the next block's instructions: ${SESSION.order.length - condIndex} part${(SESSION.order.length-condIndex)>1?"s":""} to go.</p>
+    <div class="row"><button class="btn primary" id="next">Continue</button></div>
+  `);
+  el("next").onclick = nextConditionIntro;
+}
+/* ===================== DATA: FLATTEN, CSV, SUBMIT ================== */
+const HEADERS = [
+  "participant_id","session_id","app_version","condition_position","condition",
+  "eye","eyeName","eyeCode","task","taskName","taskCode","block","row_type","index",
+  "trial","sequence_index","Stimulus","StimulusName","isStandard","isDeviant","isTarget",
+  "Report","Correct","ResponseType","RT","RT_off","stimOn_block","SOA","ISI","realizedToneISI","extraPresses",
+  "probe","plannedGapStim","plannedGapSecs","actualGapStim","actualGapSecs","probeOn_block",
+  "probe_RT","response_key","response_text","mind_wandering",
+  "breath_event","press_block","since_last_press",
+  "press","context","time_block","button_RT","preceding_trial","preceding_stimulus_name",
+  "KSS","eye_report","task_report","block_duration","n_tones","n_standards","n_deviants",
+  "n_probes","n_breaths","n_button_presses","tab_blur_count",
+  "session_start","session_end","total_duration","user_agent","screen_w","screen_h",
+  "audio_out_latency_ms","audio_sample_rate","order","conditions_run","soa_sec","probe_gap_min_s","probe_gap_max_s",
+  "block_status","pause_count","paused_ms","chosen_block_minutes","ended_early","device"
+];
+function commonCols(){
+  const def = BLK.def;
+  return {
+    participant_id: SESSION.participant_id, session_id: SESSION.session_id, app_version: CONFIG.APP_VERSION,
+    condition_position: condIndex + 1, condition: def.label, eye: def.eye, eyeName: def.eyeName, eyeCode: def.eyeCode,
+    task: def.task, taskName: def.taskName, taskCode: def.taskCode, block: 1,
+  };
+}
+function pushRow(obj){ SESSION.rows.push(obj); }
+function flattenBlockToRows(){
+  const c = commonCols();
+  BLK.T.forEach((t,k)=> pushRow(Object.assign({}, c, {
+    row_type:"trial", index:k+1,
+    trial:t.trial, sequence_index:t.sequence_index, Stimulus:t.Stimulus, StimulusName:t.StimulusName,
+    isStandard:t.isStandard, isDeviant:t.isDeviant, isTarget:t.isTarget,
+    Report:t.Report, Correct:t.Correct, ResponseType:t.ResponseType,
+    RT:fmt(t.RT), RT_off:fmt(t.RT_off), stimOn_block:fmt(t.stimOn_block),
+    SOA:fmt(t.SOA), ISI:fmt(t.ISI), realizedToneISI:fmt(t.realizedToneISI),
+    extraPresses:t.extraPressesAfterResponse,
+  })));
+  BLK.Probe.forEach((p,k)=> pushRow(Object.assign({}, c, {
+    row_type:"probe", index:k+1,
+    probe:p.probe, plannedGapStim:p.plannedGapStim, plannedGapSecs:fmt(p.plannedGapSecs),
+    actualGapStim:p.actualGapStim, actualGapSecs:fmt(p.actualGapSecs), probeOn_block:fmt(p.probeOn_block),
+    probe_RT:fmt(p.RT), response_key:p.response_key, response_text:p.response_text, mind_wandering:p.mind_wandering,
+  })));
+  BLK.Breath.forEach((b,k)=> pushRow(Object.assign({}, c, {
+    row_type:"breath", index:k+1,
+    breath_event:b.event, press_block:fmt(b.press_block), since_last_press:fmt(b.since_last_press),
+  })));
+  BLK.Button.forEach((b,k)=> pushRow(Object.assign({}, c, {
+    row_type:"button", index:k+1,
+    press:b.press, context:b.context, time_block:fmt(b.time_block), button_RT:fmt(b.RT),
+    preceding_trial:b.preceding_trial, preceding_stimulus_name:b.preceding_stimulus_name,
+    ResponseType:b.ResponseType, Correct:b.Correct,
+  })));
+  pushRow(Object.assign({}, c, {
+    row_type:"block_survey", index:1,
+    KSS:BLK.KSS, eye_report:BLK.eye_report, task_report:BLK.task_report,
+    block_duration:fmt(BLK.blockDuration), n_tones:BLK.T.length, n_standards:BLK.nStandards,
+    n_deviants:BLK.nDeviants, n_probes:BLK.Probe.length, n_breaths:BLK.Breath.length,
+    n_button_presses:BLK.Button.length, tab_blur_count:BLK.tabBlur,
+    block_status: BLK.aborted ? "aborted" : "complete",
+    pause_count: BLK.pauseCount||0, paused_ms: Math.round(BLK.pausedMs||0),
+    chosen_block_minutes: RUN.blockMinutes, device: deviceType(),
+  }));
+}
+function buildSessionMetaRow(){
+  SESSION.endISO = new Date().toISOString();
+  return {
+    participant_id: SESSION.participant_id, session_id: SESSION.session_id, app_version: CONFIG.APP_VERSION,
+    row_type:"session_meta", index:1,
+    session_start:SESSION.startISO, session_end:SESSION.endISO,
+    total_duration: SESSION.startISO ? ((Date.parse(SESSION.endISO)-Date.parse(SESSION.startISO))/1000).toFixed(1) : "",
+    user_agent: navigator.userAgent, screen_w: screen.width, screen_h: screen.height,
+    audio_out_latency_ms: (outLatSec*1000).toFixed(1), audio_sample_rate: actx ? actx.sampleRate : "",
+    order: SESSION.order.join("|"), conditions_run: SESSION.order.length,
+    soa_sec: SOA.toFixed(6), probe_gap_min_s: CONFIG.PROBE_GAP_MIN, probe_gap_max_s: CONFIG.PROBE_GAP_MAX,
+    chosen_block_minutes: RUN.blockMinutes, ended_early: SESSION.endedEarly ? 1 : 0, device: deviceType(),
+  };
+}
+function fmt(x){ return (x===null || x===undefined || (typeof x==="number" && isNaN(x))) ? "" : x; }
+function rowsToCSV(rows){
+  const head = HEADERS.join(",");
+  const lines = rows.map(r => HEADERS.map(h => csvCell(r[h])).join(","));
+  return head + "\n" + lines.join("\n");
+}
+function csvCell(v){
+  if (v===null || v===undefined) return "";
+  let s = String(v);
+  if (typeof v==="number" && isNaN(v)) return "";
+  if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+function downloadBackup(){
+  const rows = SESSION.rows.concat([buildSessionMetaRow()]);
+  const csv = rowsToCSV(rows);
+  const blob = new Blob([csv], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `iWand_${SESSION.participant_id.replace(/[^a-z0-9]/gi,"_")}_${SESSION.session_id}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+function submitData(){
+  const metaRow = buildSessionMetaRow();
+  const rows = SESSION.rows.concat([metaRow]);
+  const payload = {
+    study: CONFIG.STUDY_NAME, participant_id: SESSION.participant_id,
+    session_id: SESSION.session_id, headers: HEADERS, rows: rows,
+  };
+  const body = JSON.stringify(payload);
+  const endpointSet = CONFIG.DATA_ENDPOINT && /^https:\/\//.test(CONFIG.DATA_ENDPOINT);
+  if (!endpointSet){ finishScreen(false, "no-endpoint"); return; }
+  fetch(CONFIG.DATA_ENDPOINT, {
+    method:"POST", mode:"no-cors",
+    headers:{ "Content-Type":"text/plain;charset=UTF-8" },
+    body
+  }).then(()=> finishScreen(true)).catch(()=> finishScreen(false, "network"));
+}
+/* ===================== END SCREENS + SUMMARY ====================== */
+function allConditionsDone(){ return !SESSION.endedEarly && condIndex >= SESSION.order.length; }
+function finish(){
+  STATE.screen = "submitting"; setStage("hide"); hideOverlay(); hideTouch(); hidePauseBtn(); releaseWake(); exitFS();
+  show(`
+    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+    <h1>That's everything — thank you.</h1>
+    <p class="dim">Sending your responses to the researcher…</p>
+    <div class="row"><button class="btn ghost" id="dl" style="opacity:.7">Save a copy for myself</button></div>
+  `);
+  el("dl").onclick = downloadBackup;
+  submitData();
+}
+function finishScreen(ok, reason){
+  if (ok){
+    if (allConditionsDone()){ renderSummaryScreen(true); return; }
+    show(`
+      <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+      <h1>Thanks — your responses were saved.</h1>
+      <p>You stopped early, and everything you completed has been submitted to the researcher. That's genuinely useful. You can close this tab now.</p>
+      <p class="small dim">Want a copy for yourself? You can save one below.</p>
+      <div class="row"><button class="btn ghost" id="dl">Save a copy</button></div>
+    `);
+    el("dl").onclick = downloadBackup;
+  } else {
+    const why = reason === "no-endpoint"
+      ? "Automatic submission isn't configured yet."
+      : "Your responses couldn't be sent automatically (the connection failed).";
+    show(`
+      <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
+      <h1>Almost there — one quick manual step</h1>
+      <p>${why} Your data is safe. Please click the button below to download the file, then email it to <strong>${esc(CONFIG.CONTACT_EMAIL)}</strong>.</p>
+      <div class="row"><button class="btn primary" id="dl">Download my data</button></div>
+      <p class="small dim" style="margin-top:14px">Thank you — this is the only manual step, and it takes a moment.</p>
+    `);
+    el("dl").onclick = downloadBackup;
+    setTimeout(downloadBackup, 400);
+  }
+}
+function mean(a){ return a.reduce((s,x)=>s+x,0)/a.length; }
+function pstd(a,m){ if (a.length<2) return NaN; const mm=(m==null?mean(a):m); return Math.sqrt(a.reduce((s,x)=>s+(x-mm)*(x-mm),0)/a.length); }
+function statOf(a){ if (!a.length) return {n:0}; const m=mean(a), sd=pstd(a,m); return {n:a.length, mean:m, sd, cv:(m?sd/m:NaN)}; }
+function halfTrend(events){
+  if (events.length < 6) return null;
+  const s = events.slice().sort((a,b)=>a.t-b.t);
+  const mid = Math.floor(s.length/2);
+  const early = mean(s.slice(0,mid).map(e=>e.v));
+  const late  = mean(s.slice(mid).map(e=>e.v));
+  const rel = (late - early)/(Math.abs(early)||1);
+  let dir = "steady"; if (rel > 0.10) dir="up"; else if (rel < -0.10) dir="down";
+  return { early, late, dir, rel };
+}
+function computeSummary(){
+  const rows = SESSION.rows, conds = [];
+  SESSION.order.forEach((cond)=>{
+    const def = COND_DEFS[cond], isSound = def.task==="sound";
+    const probes = rows.filter(r=> r.row_type==="probe" && r.condition===cond && r.mind_wandering!=="" && r.mind_wandering!=null)
+                       .map(r=>({ t:+r.probeOn_block, mw:+r.mind_wandering }))
+                       .filter(p=> !isNaN(p.t) && !isNaN(p.mw))
+                       .sort((a,b)=> a.t-b.t);
+    const rec = { cond, def, isSound, nProbes: probes.length };
+    if (!probes.length){ conds.push(rec); return; }
+    rec.mwRate = probes.filter(p=>p.mw>0).length / probes.length;
+    let events;
+    if (isSound){
+      events = rows.filter(r=> r.row_type==="trial" && r.condition===cond && r.ResponseType==="hit" && r.RT!=="" && r.RT!=null)
+                   .map(r=>({ t:+r.stimOn_block, v:+r.RT }));
+    } else {
+      events = rows.filter(r=> r.row_type==="breath" && r.condition===cond && r.since_last_press!=="" && r.since_last_press!=null)
+                   .map(r=>({ t:+r.press_block, v:+r.since_last_press }));
+    }
+    events = events.filter(e=> !isNaN(e.t) && !isNaN(e.v));
+    rec.nEvents = events.length;
+    const labelOf = (t)=>{ let p = probes.find(p=> p.t >= t); if (!p) p = probes[probes.length-1]; return p.mw>0 ? "off":"on"; };
+    rec.on  = statOf(events.filter(e=> labelOf(e.t)==="on").map(e=>e.v));
+    rec.off = statOf(events.filter(e=> labelOf(e.t)==="off").map(e=>e.v));
+    rec.behTrend = halfTrend(events);
+    rec.mwTrend  = halfTrend(probes.map(p=>({t:p.t, v: p.mw>0?1:0})));
+    conds.push(rec);
+  });
+  return conds;
+}
+function onVsOffLine(rec){
+  const on = rec.on, off = rec.off;
+  if (rec.isSound){
+    if (!on || !on.n || on.n<3) return "Not enough on-task targets to summarize reaction times.";
+    let s = `On-task reactions averaged <strong>${Math.round(on.mean*1000)} ms</strong> (variability ${on.cv.toFixed(2)})`;
+    if (off && off.n>=3) s += `; off-task <strong>${Math.round(off.mean*1000)} ms</strong> (${off.cv.toFixed(2)}).`;
+    else s += `. Too few off-task moments to compare.`;
+    return s;
+  } else {
+    if (!on || !on.n || on.n<3) return "Not enough on-task breaths to summarize timing.";
+    let s = `On-task breaths came every <strong>${on.mean.toFixed(1)} s</strong> (variability ${on.cv.toFixed(2)})`;
+    if (off && off.n>=3) s += `; off-task every <strong>${off.mean.toFixed(1)} s</strong> (${off.cv.toFixed(2)}).`;
+    else s += `. Too few off-task moments to compare.`;
+    return s;
+  }
+}
+function trendLine(rec){
+  const parts = [];
+  if (rec.mwTrend){
+    const d = rec.mwTrend.dir;
+    parts.push(d==="up" ? "mind-wandering rose over the block" : d==="down" ? "mind-wandering eased over the block" : "mind-wandering held fairly steady");
+  }
+  if (rec.behTrend){
+    const d = rec.behTrend.dir;
+    if (rec.isSound) parts.push(d==="up" ? "reaction times slowed" : d==="down" ? "reaction times quickened" : "reaction times held steady");
+    else parts.push(d==="up" ? "breaths lengthened" : d==="down" ? "breaths shortened" : "breath timing held steady");
+  }
+  if (!parts.length) return "Not enough data to spot a within-block trend.";
+  return "Over the block, " + parts.join(" and ") + ".";
+}
+function renderSummaryScreen(submitted){
+  STATE.screen = "summary";
+  const S = computeSummary();
+  let html = `
+    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)} · your session at a glance</p>
+    <h1>All done — and here's a quick snapshot</h1>
+    ${submitted ? `<p class="small ok">Your responses were submitted. Thank you.</p>` : ``}
+    <p class="small dim">An informal look at your own attention during the study — not a clinical measure, just for fun.</p>
+  `;
+  S.forEach(rec=>{
+    const taskLabel = rec.isSound ? "Sound task" : "Breath task";
+    html += `<div class="sumrow"><div class="sumhead">${taskLabel}<span class="tag">${esc(rec.def.eyeName)}</span></div>`;
+    if (!rec.nProbes){ html += `<div class="sumline dim">Not enough probes in this block to summarize.</div></div>`; return; }
+    const pct = Math.round(rec.mwRate*100);
+    html += `<div class="mwbar"><span style="width:${pct}%"></span></div>`;
+    html += `<div class="sumline">Mind wandered on <strong>${pct}%</strong> of probes.</div>`;
+    html += `<div class="sumline">${onVsOffLine(rec)}</div>`;
+    html += `<div class="sumline dim">${trendLine(rec)}</div>`;
+    html += `</div>`;
+  });
+  html += `
+    <div class="row" style="margin-top:20px"><button class="btn ghost" id="dl">Save a copy of my data</button></div>
+    <p class="small dim" style="margin-top:10px">You can close this tab now.</p>
+  `;
+  show(html);
+  el("dl").onclick = downloadBackup;
+}
+/* ===================== INPUT ROUTING =============================== */
+document.addEventListener("keydown", (e)=>{
+  if (PRACTICE.onKey){ PRACTICE.onKey(e); return; }
+  if (STATE.screen !== "block") return;
+  if (CONFIG.ALLOW_PAUSE_QUIT){
+    if (e.code === "KeyP"){
+      e.preventDefault();
+      if (STATE.runState === "paused"){ if (STATE.pauseKind !== "quit") resumeBlock(); }
+      else pauseBlock("pause");
+      return;
+    }
+    if (e.code === "Escape"){ openQuitMenu(); return; }
+  }
+  if (STATE.runState === "paused") return;
+  if (STATE.runState === "probe"){
+    if (e.code === "ArrowDown"){ e.preventDefault(); recordProbeResponse(0,"DownArrow","On"); }
+    else if (e.code === "ArrowUp"){ e.preventDefault(); recordProbeResponse(1,"UpArrow","Off-nonstim"); }
+    else if (e.code === "ArrowLeft"){ e.preventDefault(); recordProbeResponse(2,"LeftArrow","Off-stim"); }
+    else if (e.code === "ArrowRight"){ e.preventDefault(); recordProbeResponse(2,"RightArrow","Off-stim"); }
+    return;
+  }
+  if (STATE.runState === "running" && e.code === "Space"){
+    e.preventDefault();
+    if (BLK.isSound) handleSoundPress(); else handleBreathPress();
+  }
+  if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
+});
+function handleSoundPress(){
+  const t = performance.now();
+  let owner = null;
+  for (let i = BLK.T.length-1; i>=0; i--){ if (BLK.T[i].onsetPerf <= t){ owner = BLK.T[i]; break; } }
+  if (!owner) return;
+  const rt = (t - owner.onsetPerf)/1000;
+  const press = {
+    press: BLK.Button.length+1, context:"oddball_response",
+    time:t, time_block:(t-BLK.blockStartPerf)/1000, RT:rt,
+    preceding_trial:owner.trial, preceding_stimulus_name:owner.StimulusName,
+    Correct:null, ResponseType:"",
+  };
+  if (owner.isTarget && owner.Report !== 1){ press.Correct = 1; press.ResponseType = "hit"; }
+  else if (owner.isTarget && owner.Report === 1){ press.Correct = 0; press.ResponseType = "extra_target_press"; }
+  else { press.Correct = 0; press.ResponseType = "false_alarm"; }
+  BLK.Button.push(press);
+  if (owner.Report !== 1){
+    owner.Report = 1; owner.RT = rt;
+    owner.RT_off = (t - (owner.onsetPerf + CONFIG.stimDurationSecs*1000))/1000;
+    if (owner.isTarget){ owner.Correct = 1; owner.ResponseType = "hit"; }
+    else { owner.Correct = 0; owner.ResponseType = "false_alarm"; }
+  } else { owner.extraPressesAfterResponse += 1; }
+}
+function handleBreathPress(){
+  const t = performance.now();
+  const breath = {
+    event: BLK.Breath.length+1, press_time:t, press_block:(t-BLK.blockStartPerf)/1000,
+    since_last_press: isNaN(BLK.lastBreathPerf) ? NaN : (t - BLK.lastBreathPerf)/1000,
+  };
+  BLK.lastBreathPerf = t; BLK.Breath.push(breath);
+  const preceding = BLK.T.length ? BLK.T[BLK.T.length-1] : null;
+  BLK.Button.push({
+    press: BLK.Button.length+1, context:"breath_press",
+    time:t, time_block:(t-BLK.blockStartPerf)/1000, RT:NaN,
+    preceding_trial: preceding ? preceding.trial : "", preceding_stimulus_name: preceding ? preceding.StimulusName : "",
+    Correct:null, ResponseType:"",
+  });
+}
+document.addEventListener("visibilitychange", ()=>{
+  if (document.hidden && STATE.screen === "block" && BLK){ BLK.tabBlur += 1; }
+  else if (!document.hidden && STATE.screen === "block"){ acquireWake(); }
+});
+function requestFS(){ try{ const e=document.documentElement; (e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e); }catch(_){} }
+function exitFS(){ try{ if (document.fullscreenElement) (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document); }catch(_){} }
+function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function makeSessionId(){
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${Math.random().toString(36).slice(2,7)}`;
+}
+function estRangeText(){
+  const nC = (FORCE_COND && COND_DEFS[FORCE_COND]) ? 1 : CONFIG.CONDITIONS_TO_RUN.filter(l=>COND_DEFS[l]).length;
+  const t = m => Math.round(nC*(m+1)+3);
+  if (CONFIG.OFFER_DURATION_CHOICE){
+    const a = t(CONFIG.BLOCK_MINUTES_SHORT), b = t(CONFIG.BLOCK_MINUTES_IDEAL);
+    return `${Math.min(a,b)}–${Math.max(a,b)} minutes`;
+  }
+  return `${t(RUN.blockMinutes)} minutes`;
+}
+/* ===================== BOOT ====================================== */
+start();
+</script>
+</body>
+</html>
