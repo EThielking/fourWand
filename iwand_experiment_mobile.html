@@ -323,7 +323,7 @@ const touch = document.getElementById("touch");
 const pauseBtn = document.getElementById("pauseBtn");
 function hideTouch(){ touch.className = ""; touch.innerHTML = ""; }
 function centralLabel(isSound){ return isSound ? "Tap for each target beep" : "Tap at the end of each exhale"; }
-function centralSub(isSound){ return isSound ? "(the higher beep)" : "(one tap per exhale)"; }
+function centralSub(isSound){ return isSound ? "" : ""; }
 function renderCentral(onPress, label, sub){
   touch.className = "show central";
   touch.innerHTML = '<button class="tapbtn" id="respBtn"><span class="tlabel">'+label+'</span>'+(sub?'<span class="tsub">'+sub+'</span>':'')+'</button>';
@@ -612,7 +612,7 @@ function nextConditionIntro(){
        </ul>`;
   const eyeBlock = isClosed
     ? `<div class="note"><strong>Eyes closed.</strong> Rest a thumb near the big button at the bottom (that is your response). When the probe sounds, three buttons fill the screen: top is off task, middle is off task on the other activity, bottom is on task. When you press start you'll hear a 5-second countdown — then close your eyes and keep them shut until the <em>chime</em> at the end of the block. Answer the probes by feel, using those three areas of the screen.</div>`
-    : `<div class="note"><strong>Eyes open.</strong> Keep your gaze relaxed on the <strong>+</strong> in the centre of the screen — and keep your eyes on the <strong>+</strong> the whole time, including while you press keys to respond to the beeps and the probes.</div>`;
+    : `<div class="note"><strong>Eyes open.</strong> Keep your gaze relaxed on the <strong>+</strong> in the centre of the screen — and keep your eyes on the <strong>+</strong> the whole time, including while you press keys to respond to the stimuli and the probes.</div>`;
   const ctrlLine = CONFIG.ALLOW_PAUSE_QUIT
     ? `<p class="small dim">If you must, tap the <strong>⏸</strong> button (top-right) to pause or stop early &mdash; otherwise, please keep going until the chime.</p>` : "";
   show(`
