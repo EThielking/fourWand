@@ -473,7 +473,7 @@ show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
 <div class="note"><strong>Example 1 — answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, tap <strong>On task</strong>.</div>
 <div class="note"><strong>Example 2 — answer Off task:</strong> You hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since your attention was on something unrelated just before the probe, tap <strong>Off task</strong>.</div>
 <p class="small dim">During eyes-closed parts, keep your eyes shut and answer from memory: top = off task, middle = off task on the other activity, bottom = on task. During eyes-open parts, keep your eyes on the fixation point.</p>
-<p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
+<p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer. Whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
 <div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
 `);
 el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
@@ -509,7 +509,7 @@ function screenBreathPracticeIntro(){
   show(`
     <p class="eyebrow">practice · 2 of 2</p>
     <h1>Practice the breath task</h1>
-    <p>Breathe naturally. Each time you finish breathing <em>out</em>, tap the big button once — one tap per exhale. The same beeps keep playing but are irrelevant to the breath task; let them fade into the background.</p>
+    <p>Breathe naturally. Each time you finish breathing <em>out</em>, tap the button once — one tap per exhale. The same beeps keep playing but are irrelevant to the breath task; let them fade into the background.</p>
     <p>This runs about <strong>30 seconds</strong> and also ends with a <em>probe</em> — answer it by tapping a button to continue.</p>
     <div class="row"><button class="btn primary" id="go">Start practice</button></div>
   `);
