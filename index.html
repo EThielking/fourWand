@@ -308,7 +308,7 @@ function screenWelcome(){
   show(`
     <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
     <h1>Thanks for helping us study natural fluctuations in attention!</h1>
-    <p class="dim small">It takes about <strong>${esc(estTotalMinutes())} minutes</strong> in total, split into four shorter blocks. You can take breaks after each block. It runs entirely in this tab, and your responses are sent to the researcher automatically at the end.</p>
+    <p class="dim small">This study takes about <strong>${esc(estTotalMinutes())} minutes</strong> in total, split into four shorter blocks. You can take breaks after each block. It runs in this tab and your responses are sent to the researcher automatically at the end (you can also download a copy).</p>
     <h2>Before you start</h2>
     <ul class="small">
       <li><strong>Use headphones</strong> if you can, in a quiet room where you won't be interrupted.</li>
@@ -354,12 +354,11 @@ function screenOverview(){
   const nC = SESSION.order.length;
   show(`
     <p class="eyebrow">how it works</p>
-    <h1>What you'll do</h1>
-    <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, back to back, each about <strong>${esc(CONFIG.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
-    <p>In every part, soft beeps play at a steady pace. There are two kinds of part:</p>
+    <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, each about <strong>${esc(CONFIG.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
+    <p>In every part, beeps play at a steady pace. There are two tasks:</p>
     <ul>
-      <li><strong>Sound tasks</strong> — you respond to a specific beep.</li>
-      <li><strong>Breath tasks</strong> — you ignore the beeps and follow your breathing.</li>
+      <li><strong>Sound task</strong> — you respond to a specific beep.</li>
+      <li><strong>Breath task</strong> — follow and respond to your breath cycle (and beeps are irrelevant).</li>
     </ul>
     <p>Some parts are done with your <strong>eyes open</strong>, some with your <strong>eyes closed</strong>. Each part begins with its own short reminder of what to do, so you don't need to memorize everything now.</p>
     <div class="note">Throughout, the beeps will occasionally pause for a <em>probe</em>. When you hear it, you'll use the arrow keys to report where your attention was in the moment <strong>JUST</strong> before the probe. The next screen explains this — it's important you understand this before starting.</div>
@@ -371,12 +370,12 @@ function screenOverview(){
 function screenProbeInstructions(){
 STATE.screen = "probeInfo";
 show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
-<p>At random points, the beeps will briefly pause and you'll hear the spoken word <em>"pause"</em>. This is the probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
-<h2>The three responses</h2>
+<p>At random points, you'll hear the spoken word <em>"pause"</em>. This is the experience-sampling probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
+<h2>The responses</h2>
 <ul>
-  <li><strong>On task</strong> — you were focused on the task: the beeps during the sound task, or your breath during the breath task.</li>
-  <li><strong>Off task</strong> — your mind was on something unrelated to the task, such as a thought, memory, plan, or something in the room.</li>
-  <li><strong>Off task, on the other thing</strong> — your mind had drifted specifically to the other study activity: your breath during the sound task, or the beeps during the breath task.</li>
+  <li><strong>On task</strong> — your mind was focusing on performing the task itself (for example, listening to each sound so you can respond quickly to the target, or feeling the end of your breath cycle so you can report it precisely). </li>
+  <li><strong>Off task, on the other thing</strong> - your mind was on specifically the other task's activity: your breath during the sound task, or the beeps during the breath task.</li>
+  <li><strong>Off task</strong> — your mind was on something task-unrelated (unrelated to both the breath and sounds tasks).</li>
 </ul>
 <p>What matters is your attention <strong>immediately before</strong> the probe — not whether your mind wandered at some earlier point since the last probe.</p>
 <div class="note"><strong>Example 1 — answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, tap <strong>On task</strong>.</div>
