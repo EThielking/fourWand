@@ -6,13 +6,13 @@
 <title>iWand — Behavioral Pilot</title>
 <style>
   :root{
-    --bg:#16181c;          /* calm near-black, low strain */
+    --bg:#16181c;         
     --bg-soft:#1d2025;
     --panel:#23272e;
     --ink:#e9ecf1;         /* primary text */
     --ink-dim:#a4abb6;     /* secondary text */
     --line:#333842;
-    --accent:#6ea8fe;      /* single quiet accent  -  instrument blue */
+    --accent:#6ea8fe;      
     --accent-ink:#0c1422;
     --good:#7bd88f;
     --warn:#f0c674;
@@ -1332,10 +1332,8 @@ function renderSummaryScreen(submitted){
   const overallRT = rtVals.length ? Math.round(mean(rtVals)*1000) : null;
 
   let html = `
-    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)} · your session at a glance</p>
-    <h1>All done. Here's a quick snapshot.</h1>
+    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)} · your session summary</p>
     ${submitted ? `<p class="small ok">Your responses were submitted. Thank you.</p>` : ``}
-    <p class="small dim">This is an informal summary of this session, not a clinical measure.</p>
     <div class="sumrow">
       <div class="sumhead">Overall</div>
       <div class="sumline">Mind wandering: <strong>${overallMW==null ? "not enough probes" : overallMW + "%"}</strong>${totalProbes ? ` across ${totalProbes} probes` : ""}.</div>
