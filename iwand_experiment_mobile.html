@@ -463,35 +463,33 @@ function screenOverview(){
 }
 
 function screenProbeInstructions(){
-STATE.screen = "probeInfo";
-show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
+  STATE.screen = "probeInfo";
+  show(`
+    <p class="eyebrow">the probe</p>
+    <h1>Reporting your attention</h1>
 
-```
-<p>At random points, the beeps will briefly pause and you'll hear the spoken word <em>"pause"</em>. This is the probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
+    <p>At random points, the beeps will briefly pause and you'll hear the spoken word <em>"pause"</em>. This is the probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
 
-<h2>The three responses</h2>
-<ul>
-  <li><strong>On task</strong> — you were focused on the task: the beeps during the sound task, or your breath during the breath task.</li>
-  <li><strong>Off task</strong> — your mind was on something unrelated to the task, such as a thought, memory, plan, or something in the room.</li>
-  <li><strong>Off task, on the other thing</strong> — your mind had drifted specifically to the other study activity: your breath during the sound task, or the beeps during the breath task.</li>
-</ul>
+    <h2>The three responses</h2>
+    <ul>
+      <li><strong>On task</strong> — you were focused on the task: the beeps during the sound task, or your breath during the breath task.</li>
+      <li><strong>Off task</strong> — your mind was on something unrelated to the task, such as a thought, memory, plan, or something in the room.</li>
+      <li><strong>Off task, on the other thing</strong> — your mind had drifted specifically to the other study activity: your breath during the sound task, or the beeps during the breath task.</li>
+    </ul>
 
-<p>What matters is your attention <strong>immediately before</strong> the probe — not whether your mind wandered at some earlier point since the last probe.</p>
+    <p>What matters is your attention <strong>immediately before</strong> the probe — not whether your mind wandered at some earlier point since the last probe.</p>
 
-<div class="note"><strong>Example 1 — answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, tap <strong>On task</strong>.</div>
+    <div class="note"><strong>Example 1 — answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, tap <strong>On task</strong>.</div>
 
-<div class="note"><strong>Example 2 — answer Off task:</strong> You hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since your attention was on something unrelated just before the probe, tap <strong>Off task</strong>.</div>
+    <div class="note"><strong>Example 2 — answer Off task:</strong> You hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since your attention was on something unrelated just before the probe, tap <strong>Off task</strong>.</div>
 
-<p class="small dim">During eyes-closed parts, keep your eyes shut and answer from memory: top = off task, middle = off task on the other activity, bottom = on task. During eyes-open parts, keep your eyes on the fixation point.</p>
+    <p class="small dim">During eyes-closed parts, keep your eyes shut and answer from memory: top = off task, middle = off task on the other activity, bottom = on task. During eyes-open parts, keep your eyes on the fixation point.</p>
 
-<p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
+    <p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
 
-<div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
-```
-
-`);
-
-el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
+    <div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
+  `);
+  el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
 }
 
 /* ---------------------- PRACTICE (30s each, ends with a required probe) ---- */
