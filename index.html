@@ -126,13 +126,14 @@ const CONFIG = {
   RANDOMIZE_ORDER:   true,
 
   // ---- CORE TIMING (mirrors parameters_bsWand_oddball.m) ----
-  blockMinutes:     7.33,   // minutes per condition
+  //blockMinutes:     7.33,   // minutes per condition
+  blockMinutes:     1,   // minutes per condition
   //blockMinutes:     1,   // minutes per condition
   oddballRateHz:    1.4,    // tones per second  -> SOA = 1/1.4 = 0.714 s
   standardHz:       500,    // standard tone (Hz)
   deviantHz:        650,    // deviant/target tone (Hz)
   stimDurationSecs: 0.100,  // tone duration
-  PROBE_GAP_MIN:    20,     // min seconds between probes
+  PROBE_GAP_MIN:    15,     // min seconds between probes
   PROBE_GAP_MAX:    30,     // max seconds between probes
 
   // ---- ODDBALL STRUCTURE ----
@@ -347,8 +348,15 @@ const overlay = document.getElementById("overlay");
 function show(html){ app.innerHTML = `<div class="card">${html}</div>`; app.scrollTop = 0; }
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function blurActive(){
+  try{
+    const a = document.activeElement;
+    if (a && typeof a.blur === "function") a.blur();
+  }catch(e){}
+}
 
 function setStage(mode, inner){ // mode: 'dark' | 'open' | 'hide'
+  if (mode !== "hide") blurActive();
   stage.className = "";
   if (mode === "hide"){ stage.classList.remove("show"); stage.innerHTML = ""; return; }
   stage.classList.add("show", mode);
@@ -475,7 +483,11 @@ function screenPracticeIntro(){
     <p class="small dim">Keep your hand near the spacebar.</p>
     <div class="row"><button class="btn primary" id="go">Start practice</button></div>
   `);
-  el("go").onclick = ()=> runPractice("sound", soundPracticeResult);
+  el("go").onclick = (ev)=>{
+    const b = ev && ev.currentTarget ? ev.currentTarget : el("go");
+    if (b){ b.disabled = true; b.blur(); }
+    runPractice("sound", soundPracticeResult);
+  };
 }
 
 function soundPracticeResult(stats){
@@ -501,7 +513,11 @@ function screenBreathPracticeIntro(){
     <p>This practice runs for about <strong>30 seconds</strong> and also ends with a probe. Answer it with the arrow keys before continuing.</p>
     <div class="row"><button class="btn primary" id="go">Start practice</button></div>
   `);
-  el("go").onclick = ()=> runPractice("breath", breathPracticeResult);
+  el("go").onclick = (ev)=>{
+    const b = ev && ev.currentTarget ? ev.currentTarget : el("go");
+    if (b){ b.disabled = true; b.blur(); }
+    runPractice("breath", breathPracticeResult);
+  };
 }
 
 function breathPracticeResult(stats){
@@ -522,6 +538,7 @@ function breathPracticeResult(stats){
 const PRACTICE = { onKey: null, mode: null };
 
 function runPractice(task, onDone){
+  blurActive();
   STATE.screen = "practiceRun"; STATE.runState = "running"; STATE.task = task;
   const isSound = task === "sound";
   setStage("open", `<div class="fix">+</div><div class="stagehint">${isSound ? "press space on the higher beep" : "press space at the end of each exhale"}</div>`);
@@ -622,11 +639,28 @@ function nextConditionIntro(){
     ${ctrlLine}
     <div class="row"><button class="btn primary" id="ready">Start this part</button></div>
   `);
-  el("ready").onclick = ()=> countdownThenBlock(def);
+  el("ready").onclick = (ev)=>{
+    const b = ev && ev.currentTarget ? ev.currentTarget : el("ready");
+    if (b){ b.disabled = true; b.blur(); }
+    countdownThenBlock(def);
+  };
+}
+
+let flowToken = 0;
+let countdownVisualTimer = null;
+let countdownWaitTimer = null;
+function clearCountdownTimers(){
+  if (countdownVisualTimer){ clearInterval(countdownVisualTimer); countdownVisualTimer = null; }
+  if (countdownWaitTimer){ clearInterval(countdownWaitTimer); countdownWaitTimer = null; }
 }
 
 function countdownThenBlock(def){
+  if (STATE.screen === "countdown" || STATE.screen === "block") return;
+  blurActive();
+  clearCountdownTimers();
+  const token = ++flowToken;
   STATE.screen = "countdown";
+  STATE.runState = "idle";
   resumeAudio();
   const isClosed = def.eye === "EC";
   // schedule 5 beeps then block start
@@ -642,17 +676,26 @@ function countdownThenBlock(def){
   }
   // visual countdown (eyes open)
   let n = 5;
-  const vi = setInterval(()=>{
+  countdownVisualTimer = setInterval(()=>{
+    if (token !== flowToken){ clearCountdownTimers(); return; }
     n--;
     if (!isClosed && el("cnum")) el("cnum").textContent = n > 0 ? String(n) : "+";
-    if (n <= 0){ clearInterval(vi); }
+    if (n <= 0 && countdownVisualTimer){ clearInterval(countdownVisualTimer); countdownVisualTimer = null; }
   }, 1000);
   // launch the block exactly at blockStartAudio
-  waitUntilAudio(blockStartAudio, ()=> runBlock(def, blockStartAudio));
+  countdownWaitTimer = waitUntilAudio(blockStartAudio, ()=>{
+    if (token !== flowToken || STATE.screen !== "countdown") return;
+    clearCountdownTimers();
+    runBlock(def, blockStartAudio);
+  }, token);
 }
 
-function waitUntilAudio(at, cb){
-  const iv = setInterval(()=>{ if (actx.currentTime >= at){ clearInterval(iv); cb(); } }, 15);
+function waitUntilAudio(at, cb, token){
+  const iv = setInterval(()=>{
+    if (token != null && token !== flowToken){ clearInterval(iv); return; }
+    if (actx.currentTime >= at){ clearInterval(iv); cb(); }
+  }, 15);
+  return iv;
 }
 
 /* ===================== THE BLOCK (core engine) ===================== */
@@ -660,6 +703,8 @@ let BLK = null;            // per-block working data
 let schedTimer = null;
 
 function runBlock(def, blockStartAudio){
+  clearCountdownTimers();
+  if (schedTimer){ clearInterval(schedTimer); schedTimer = null; }
   STATE.screen = "block"; STATE.runState = "running"; STATE.task = def.task; STATE.eye = def.eye;
   const isSound = def.task === "sound";
   const isClosed = def.eye === "EC";
@@ -682,7 +727,7 @@ function runBlock(def, blockStartAudio){
     nStandards: 0, nDeviants: 0,
     lastBreathPerf: NaN,
     tabBlur: 0,
-    ended: false, aborted: false,
+    ended: false, aborted: false, flattened: false,
     pauseCount: 0, pausedMs: 0, _pauseStart: null,
     KSS: NaN, eye_report: NaN, task_report: NaN,
   };
@@ -832,6 +877,7 @@ function recordProbeResponse(code, keyName, text){
 
 function endBlock(){
   if (!BLK || BLK.ended) return;
+  clearCountdownTimers();
   BLK.ended = true;
   STATE.runState = "idle";
   clearInterval(schedTimer); schedTimer = null;
@@ -896,9 +942,13 @@ function resumeBlock(){
   hideOverlay();
   try{ actx.resume(); }catch(e){}
   if (BLK && BLK._pauseStart != null){
-    BLK.pausedMs += (performance.now() - BLK._pauseStart);
+    const deltaMs = performance.now() - BLK._pauseStart;
+    BLK.pausedMs += deltaMs;
     BLK.pauseCount += 1;
     BLK._pauseStart = null;
+    BLK.blockStartPerf += deltaMs;
+    if (BLK.activeTrial && !BLK.activeTrial.finalized) BLK.activeTrial.onsetPerf += deltaMs;
+    if (BLK.activeProbe && !BLK.activeProbe.answered) BLK.activeProbe.probeOnPerf += deltaMs;
   }
   if (CONFIG.REQUIRE_FULLSCREEN && !document.fullscreenElement) requestFS();
   STATE.runState = STATE.prePauseRun || "running";
@@ -913,6 +963,7 @@ function quitNow(){
     BLK.pauseCount += 1;
     BLK._pauseStart = null;
   }
+  SESSION.endedEarly = true;
   if (BLK && !BLK.ended){
     finalizeActiveTrial();
     BLK.ended = true;
@@ -922,7 +973,6 @@ function quitNow(){
     BLK.aborted = true;
     flattenBlockToRows();
   }
-  SESSION.endedEarly = true;
   STATE.runState = "idle";
   finish();
 }
@@ -933,6 +983,7 @@ function surveyKSS(){
   show(`
     <p class="progress">Part ${condIndex+1} of ${SESSION.order.length} · </p>
     <h1>Your sleepiness during the five minutes before this rating was:</h1>
+    <p class="dim small">Pick the number that best fits the last moments before the chime.</p>
     <div class="scale" id="kssScale"></div>
     <div class="small dim" style="display:flex;justify-content:space-between;margin-top:2px">
       <span>1 · extremely alert</span><span>9 · fighting sleep</span>
@@ -1033,6 +1084,8 @@ function commonCols(){
 function pushRow(obj){ SESSION.rows.push(obj); }
 
 function flattenBlockToRows(){
+  if (!BLK || BLK.flattened) return;
+  BLK.flattened = true;
   const c = commonCols();
   // trials
   BLK.T.forEach((t,k)=> pushRow(Object.assign({}, c, {
@@ -1073,6 +1126,7 @@ function flattenBlockToRows(){
     block_status: BLK.aborted ? "aborted" : "complete",
     pause_count: BLK.pauseCount || 0,
     paused_ms: Math.round(BLK.pausedMs || 0),
+    ended_early: SESSION.endedEarly ? 1 : 0,
   }));
 }
 
@@ -1310,14 +1364,17 @@ function renderSummaryScreen(submitted){
 
 /* ===================== INPUT ROUTING =============================== */
 document.addEventListener("keydown", (e)=>{
+  const controlKey = ["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code);
   // practice has its own handler
   if (PRACTICE.onKey){ PRACTICE.onKey(e); return; }
 
+  if (STATE.screen === "countdown" && controlKey){ e.preventDefault(); e.stopPropagation(); return; }
   if (STATE.screen !== "block") return;
 
   if (CONFIG.ALLOW_PAUSE_QUIT){
     if (e.code === "KeyP"){
       e.preventDefault();
+      e.stopPropagation();
       if (STATE.runState === "paused"){
         if (STATE.pauseKind !== "quit") resumeBlock();
       } else {
@@ -1327,6 +1384,7 @@ document.addEventListener("keydown", (e)=>{
     }
     if (e.code === "Escape"){
       e.preventDefault();
+      e.stopPropagation();
       openQuitMenu();
       return;
     }
@@ -1336,20 +1394,29 @@ document.addEventListener("keydown", (e)=>{
 
   // probe answering (any task)
   if (STATE.runState === "probe"){
-    if (e.code === "ArrowDown"){ e.preventDefault(); recordProbeResponse(0,"DownArrow","On"); }
-    else if (e.code === "ArrowUp"){ e.preventDefault(); recordProbeResponse(1,"UpArrow","Off-nonstim"); }
-    else if (e.code === "ArrowLeft"){ e.preventDefault(); recordProbeResponse(2,"LeftArrow","Off-stim"); }
-    else if (e.code === "ArrowRight"){ e.preventDefault(); recordProbeResponse(2,"RightArrow","Off-stim"); }
+    if (e.code === "ArrowDown"){ e.preventDefault(); e.stopPropagation(); recordProbeResponse(0,"DownArrow","On"); }
+    else if (e.code === "ArrowUp"){ e.preventDefault(); e.stopPropagation(); recordProbeResponse(1,"UpArrow","Off-nonstim"); }
+    else if (e.code === "ArrowLeft"){ e.preventDefault(); e.stopPropagation(); recordProbeResponse(2,"LeftArrow","Off-stim"); }
+    else if (e.code === "ArrowRight"){ e.preventDefault(); e.stopPropagation(); recordProbeResponse(2,"RightArrow","Off-stim"); }
     return;
   }
 
   // running
   if (STATE.runState === "running" && e.code === "Space"){
     e.preventDefault();
+    e.stopPropagation();
     if (BLK.isSound) handleSoundPress();
     else handleBreathPress();
   }
-  if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
+  if (controlKey){ e.preventDefault(); e.stopPropagation(); }
+});
+
+document.addEventListener("keyup", (e)=>{
+  if ((STATE.screen === "countdown" || STATE.screen === "block" || STATE.screen === "practiceRun") &&
+      ["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)){
+    e.preventDefault();
+    e.stopPropagation();
+  }
 });
 
 function handleSoundPress(){
