@@ -369,26 +369,26 @@ function screenOverview(){
 }
 
 function screenProbeInstructions(){
-  STATE.screen = "probeInfo";
-  show(`
-    <p class="eyebrow">the probe</p>
-    <h1>Reporting your attention</h1>
-    <p>At random points the beeps briefly pause and you'll hear a probe. The instant before it, your mind was <em>somewhere</em>. Answer honestly with one arrow key — there are no right answers, and drifting off is completely normal and expected.</p>
-    <h2>The three responses</h2>
-    <ul>
-      <li><span class="key">↓</span> <strong>On task</strong> — you were focused on the task (the beeps, or your breath).</li>
-      <li><span class="key">↑</span> <strong>Off task</strong> — your mind had wandered to something <em>unrelated</em> (a thought, a memory, the room).</li>
-      <li><span class="key">←</span> or <span class="key">→</span> <strong>Off task, on the other thing</strong> — you'd drifted, but specifically onto the <em>other</em> activity: caught up in your breathing during the sound task, or caught up in the beeps during the breath task.</li>
-    </ul>
-    <p>NOTE: Ensure you answer basesd on your experience in the moments JUST before the probe, rather than based on whether your attention drifted at any point since the previous probe. Supposed that after responding to the previous probe, you resumed the sound task, caught yourself thinking about a TV show, then resumed focus on the task and was interrupted by the probe. Your response should indicate on task focus by pressing the down arrow</p>
-    <div class="note">Example: Suppose that you hear the probe and realize that just before it, while you were still been responding to the target tones during the sound task, you were mostly deciding where to eat dinner later. Since you were focused on something unrelated to the task just before the probe, you should classify this as off-task and respond with the up arrow.</div>
-    <p class="small dim">During eyes-closed parts you'll keep your eyes shut and answer from memory of these three keys, and during the eyes-open part you'll keep your eyes on a fixation point, so please get comfortable with these response options now.</p>
-    <p> We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and are interested in capturing your experience as it naturally unfolds. There is no right or wrong answer—whether your mind stays on task or drifts to other thoughts, both experiences are valuable to us. Please respond honestly based on your experience just before the probe.
-</p>
-    <div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
-  `);
-  el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
+STATE.screen = "probeInfo";
+show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
+<p>At random points, the beeps will briefly pause and you'll hear the spoken word <em>"pause"</em>. This is the probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
+<h2>The three responses</h2>
+<ul>
+  <li><strong>On task</strong> — you were focused on the task: the beeps during the sound task, or your breath during the breath task.</li>
+  <li><strong>Off task</strong> — your mind was on something unrelated to the task, such as a thought, memory, plan, or something in the room.</li>
+  <li><strong>Off task, on the other thing</strong> — your mind had drifted specifically to the other study activity: your breath during the sound task, or the beeps during the breath task.</li>
+</ul>
+<p>What matters is your attention <strong>immediately before</strong> the probe — not whether your mind wandered at some earlier point since the last probe.</p>
+<div class="note"><strong>Example 1 — answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, tap <strong>On task</strong>.</div>
+<div class="note"><strong>Example 2 — answer Off task:</strong> You hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since your attention was on something unrelated just before the probe, tap <strong>Off task</strong>.</div>
+<p class="small dim">During eyes-closed parts, keep your eyes shut and answer from memory: top = off task, middle = off task on the other activity, bottom = on task. During eyes-open parts, keep your eyes on the fixation point.</p>
+<p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
+<div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
+`);
+el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
 }
+
+  
 
 /* ---------------------- PRACTICE -------------------------------- */
 function screenPracticeIntro(){
