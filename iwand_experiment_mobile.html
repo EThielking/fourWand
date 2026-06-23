@@ -322,7 +322,7 @@ function releaseWake(){ try{ if (wakeLock){ wakeLock.release(); wakeLock = null;
 const touch = document.getElementById("touch");
 const pauseBtn = document.getElementById("pauseBtn");
 function hideTouch(){ touch.className = ""; touch.innerHTML = ""; }
-function centralLabel(isSound){ return isSound ? "Tap for each target beep" : "Tap at the end of each exhale"; }
+function centralLabel(isSound){ return isSound ? "" : ""; }
 function centralSub(isSound){ return isSound ? "" : ""; }
 function renderCentral(onPress, label, sub){
   touch.className = "show central";
@@ -377,7 +377,7 @@ function screenWelcome(){
   STATE.screen = "welcome";
   show(`
     <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
-    <h1>Thanks for helping us pilot this study about our natural fluctuations in attention</h1>
+    <h1>Thanks for helping us study natural fluctuations in attention!</h1>
     <p class="dim small">It takes roughly <strong>${esc(estRangeText())}</strong> in total, split into four shorter blocks (you'll pick the length on the next screen). You can take breaks after each block. It runs entirely in this tab, and your responses are sent to the researcher automatically at the end.</p>
     <h2>Before you start</h2>
     <ul class="small">
@@ -450,7 +450,7 @@ function screenOverview(){
   show(`
     <p class="eyebrow">how it works</p>
     <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, each about <strong>${esc(RUN.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
-    <p>In every part, soft beeps play at a steady pace. There are two kinds of part:</p>
+    <p>In every part, soft beeps play at a steady pace. There are two kinds of tasks:</p>
     <ul>
       <li><strong>Sound tasks</strong> — you respond to a specific beep.</li>
       <li><strong>Breath tasks</strong> — you ignore the beeps and follow your breathing.</li>
@@ -461,12 +461,13 @@ function screenOverview(){
   `);
   el("next").onclick = screenProbeInstructions;
 }
+
 function screenProbeInstructions(){
 STATE.screen = "probeInfo";
 show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
 
 ```
-<p>At random points, the beeps will briefly pause and you’ll hear the spoken word <em>“pause”</em>. This is the probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
+<p>At random points, the beeps will briefly pause and you'll hear the spoken word <em>"pause"</em>. This is the probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
 
 <h2>The three responses</h2>
 <ul>
@@ -489,6 +490,7 @@ show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
 ```
 
 `);
+
 el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
 }
 
