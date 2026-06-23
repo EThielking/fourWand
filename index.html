@@ -12,7 +12,7 @@
     --ink:#e9ecf1;         /* primary text */
     --ink-dim:#a4abb6;     /* secondary text */
     --line:#333842;
-    --accent:#6ea8fe;      /* single quiet accent — instrument blue */
+    --accent:#6ea8fe;      /* single quiet accent  -  instrument blue */
     --accent-ink:#0c1422;
     --good:#7bd88f;
     --warn:#f0c674;
@@ -77,6 +77,20 @@
   .stagetext{max-width:560px;padding:0 24px;font-size:21px;color:#e9ecf1}
   .stagehint{margin-top:22px;font-family:var(--mono);font-size:13px;letter-spacing:.1em;color:#8a929e;text-transform:uppercase}
   .countbeat{font-family:var(--mono);font-size:14px;color:#8a929e;margin-top:18px}
+
+  /* pause overlay and end-of-session summary */
+  #overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:100;background:rgba(8,9,11,.86)}
+  #overlay.show{display:flex}
+  #overlay .ocard{background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:28px 32px;max-width:420px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+  #overlay h2{margin:0 0 8px}
+  .sumrow{padding:14px 0;border-top:1px solid var(--line)}
+  .sumrow:first-of-type{border-top:none}
+  .sumhead{font-weight:600;font-size:16px;margin-bottom:8px;letter-spacing:-.01em}
+  .sumhead .tag{font-family:var(--mono);font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.1em;margin-left:8px}
+  .mwbar{height:7px;border-radius:99px;background:#11141a;border:1px solid var(--line);overflow:hidden;margin:4px 0 10px}
+  .mwbar span{display:block;height:100%;background:var(--accent)}
+  .sumline{font-size:14.5px;margin:3px 0}
+  .sumline.dim{color:var(--ink-dim)}
   @media (max-width:520px){ .card{padding:26px 22px} h1{font-size:22px} body{font-size:16px} }
   @media (prefers-reduced-motion: reduce){ button.btn{transition:none} }
 </style>
@@ -84,11 +98,12 @@
 <body>
 <div id="app"></div>
 <div id="stage" aria-live="polite"></div>
+<div id="overlay" aria-live="assertive"></div>
 
 <script>
 "use strict";
 /* ======================================================================
-   iWand — web behavioral collection
+   iWand  -  web behavioral collection
    Auditory oddball (RT / breath-attention) with experience-sampling probes.
    Behavior-only port of parameters_bsWand_oddball.m + iWand recording script.
    Self-contained: tones are synthesized (no audio files), no external libraries.
@@ -126,9 +141,12 @@ const CONFIG = {
   minStandardsBetweenDeviants: 2,
 
   // ---- REMOTE-FRIENDLY OPTIONS (these are additions, not in the lab version) ----
+  USE_SPOKEN_PROBE: true,   // probe is the spoken word "pause", with a non-speech fallback if unsupported
+  ALLOW_PAUSE_QUIT: true,  // P pauses; Esc opens the save-and-quit confirmation
   SPEAK_EYES_CLOSED: false,  // speak short spoken guidance during eyes-closed blocks
   REQUIRE_FULLSCREEN: true, // request fullscreen at start to reduce distraction
-  SHORT_PRACTICE:     true, // brief guided practice before the real run
+  SHORT_PRACTICE:     true, // guided practice before the real run
+  PRACTICE_TONE_SECS: 30, // seconds per practice before the required probe
 
   // ---- AUDIO ----
   toneGain: 0.18,           // 0..1 amplitude of tones
@@ -168,12 +186,15 @@ const SESSION = {
   order: [],                 // array of condition labels in run order
   rows: [],                  // flat data rows -> CSV + POST
   meta: {},
+  endedEarly: false,
 };
 window.__IWAND = SESSION;    // exposed for the backup-download button
 
 const STATE = {
   screen: "welcome",
-  runState: "idle",          // idle | running | probe  (inside a block)
+  runState: "idle",          // idle | running | probe | paused  (inside a block)
+  prePauseRun: null,
+  pauseKind: null,
   task: null, eye: null,     // current condition
 };
 
@@ -206,13 +227,6 @@ function scheduleTone(freq, durSec, when, gain){
   g.gain.exponentialRampToValueAtTime(0.0001, when + durSec);
   osc.connect(g).connect(actx.destination);
   osc.start(when); osc.stop(when + durSec + 0.02);
-}
-// distinct probe (a gentle low double-note) — clearly not an oddball tone
-function scheduleProbeCue(when){
-  const notes = [[392, 0.16, 0.10], [294, 0.30, 0.10]]; // G4 then D4, soft
-  let t = when;
-  notes.forEach(([f,d,gn])=>{ scheduleSoft(f,d,t,gn); t += d*0.78; });
-  return when;
 }
 function scheduleSoft(freq, durSec, when, gain){
   const osc = actx.createOscillator(); const g = actx.createGain();
@@ -250,6 +264,47 @@ function speak(text){
   }catch(e){}
 }
 
+let ttsAvailable = false;
+function initTTS(){
+  try{
+    if (!("speechSynthesis" in window)){ ttsAvailable = false; return; }
+    window.speechSynthesis.getVoices();
+    ttsAvailable = true;
+    window.speechSynthesis.onvoiceschanged = ()=>{ ttsAvailable = true; };
+  }catch(e){ ttsAvailable = false; }
+}
+function speakNow(text){
+  try{
+    if (!("speechSynthesis" in window)) return false;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0; u.lang = "en-US";
+    window.speechSynthesis.speak(u);
+    return true;
+  }catch(e){ return false; }
+}
+function scheduleNoiseCue(when){
+  const dur = 0.34, sr = actx.sampleRate;
+  const buf = actx.createBuffer(1, Math.max(1, Math.ceil(sr*dur)), sr);
+  const d = buf.getChannelData(0);
+  for (let i=0;i<d.length;i++) d[i] = (Math.random()*2-1);
+  const src = actx.createBufferSource(); src.buffer = buf;
+  const bp = actx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=1100; bp.Q.value=0.8;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(0.13, when+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+  src.connect(bp).connect(g).connect(actx.destination);
+  src.start(when); src.stop(when+dur+0.02);
+}
+function probeCue(when){
+  if (CONFIG.USE_SPOKEN_PROBE && ttsAvailable && ("speechSynthesis" in window)){
+    if (speakNow("pause")) return performance.now();
+  }
+  scheduleNoiseCue(when);
+  return audioToPerf(when);
+}
+
 /* ===================== SEQUENCE GENERATOR ==========================
    Faithful port of the MATLAB chunk algorithm: each 10-tone chunk has
    exactly 8 standards + 2 deviants, deviants >= MIN_DEV_GAP apart
@@ -277,10 +332,18 @@ function buildBlockSequence(){
   return seq.slice(0, N_TONES);
 }
 function randGapStim(){ return GAP_MIN_STIM + ((Math.random() * (GAP_MAX_STIM - GAP_MIN_STIM + 1)) | 0); }
+function buildPracticeSeq(n){
+  const seq = new Array(n).fill(STANDARD);
+  let i = 3 + ((Math.random()*2)|0);
+  while (i < n-2){ seq[i] = DEVIANT; i += MIN_DEV_GAP + 1 + ((Math.random()*3)|0); }
+  if (n >= 2){ seq[n-1] = STANDARD; seq[n-2] = STANDARD; }
+  return seq;
+}
 
 /* ===================== UI HELPERS ================================== */
 const app = document.getElementById("app");
 const stage = document.getElementById("stage");
+const overlay = document.getElementById("overlay");
 function show(html){ app.innerHTML = `<div class="card">${html}</div>`; app.scrollTop = 0; }
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
@@ -291,6 +354,8 @@ function setStage(mode, inner){ // mode: 'dark' | 'open' | 'hide'
   stage.classList.add("show", mode);
   stage.innerHTML = inner || "";
 }
+function showOverlay(html){ overlay.innerHTML = `<div class="ocard">${html}</div>`; overlay.classList.add("show"); }
+function hideOverlay(){ overlay.classList.remove("show"); overlay.innerHTML = ""; }
 
 /* ===================== SCREEN FLOW ================================= */
 function start(){
@@ -320,11 +385,11 @@ function screenWelcome(){
     <div id="pidErr" class="small bad" style="min-height:18px"></div>
     <hr/>
     <h2 class="small" style="margin-top:0">Quick sound check</h2>
-    <p class="small dim">Press play and adjust your volume so the beeps are clearly audible but comfortable. You'll hear the two beep types you'll be listening for.</p>
+    <p class="small dim">Press play and adjust your volume so the beeps are clearly audible but comfortable. You'll hear the two beep types you'll be listening for, plus the spoken word "pause" that marks a probe.</p>
     <div class="row">
       <button class="btn" id="testStd">Play standard beep</button>
       <button class="btn" id="testDev">Play target beep</button>
-      <button class="btn" id="testProbe">Play probe </button>
+      <button class="btn" id="testProbe">Play probe</button>
     </div>
     <label class="small" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px">
       <input type="checkbox" id="heard" style="margin-top:5px"/>
@@ -336,13 +401,13 @@ function screenWelcome(){
   `);
   el("testStd").onclick = ()=>{ initAudio(); resumeAudio(); scheduleTone(CONFIG.standardHz, CONFIG.stimDurationSecs, actx.currentTime+0.05, CONFIG.toneGain); };
   el("testDev").onclick = ()=>{ initAudio(); resumeAudio(); scheduleTone(CONFIG.deviantHz, CONFIG.stimDurationSecs, actx.currentTime+0.05, CONFIG.toneGain); };
-  el("testProbe").onclick = ()=>{ initAudio(); resumeAudio(); scheduleProbeCue(actx.currentTime+0.05); };
+  el("testProbe").onclick = ()=>{ initAudio(); resumeAudio(); initTTS(); probeCue(actx.currentTime+0.05); };
   el("go").onclick = ()=>{
     const pid = el("pid").value.trim();
     if (pid.length < 1){ el("pidErr").textContent = "Please enter your name or initials."; return; }
     if (!el("heard").checked){ el("pidErr").textContent = "Please confirm you can hear the beeps."; return; }
     SESSION.participant_id = pid;
-    initAudio(); resumeAudio();
+    initAudio(); resumeAudio(); initTTS();
     if (CONFIG.REQUIRE_FULLSCREEN) requestFS();
     SESSION.startISO = new Date().toISOString();
     screenOverview();
@@ -357,93 +422,74 @@ function screenOverview(){
     <p>The study has <strong>${nC} part${nC>1?"s":""}</strong>, each about <strong>${esc(CONFIG.blockMinutes)} minutes</strong> with a short break between. The order is chosen at random for you.</p>
     <p>In every part, beeps play at a steady pace. There are two tasks:</p>
     <ul>
-      <li><strong>Sound task</strong> — you respond to a specific beep.</li>
-      <li><strong>Breath task</strong> — follow and respond to your breath cycle (and beeps are irrelevant).</li>
+      <li><strong>Sound task:</strong> respond to a specific beep.</li>
+      <li><strong>Breath task:</strong> follow your breathing while the beeps continue in the background.</li>
     </ul>
-    <p>Some parts are done with your <strong>eyes open</strong>, some with your <strong>eyes closed</strong>. Each part begins with its own short reminder of what to do, so you don't need to memorize everything now.</p>
-    <div class="note">Throughout, the beeps will occasionally pause for a <em>probe</em>. When you hear it, you'll use the arrow keys to report where your attention was in the moment <strong>JUST</strong> before the probe. The next screen explains this — it's important you understand this before starting.</div>
+    <p>Some parts are done with your <strong>eyes open</strong>, some with your <strong>eyes closed</strong>. Each part begins with its own short reminder, so you don't need to memorize everything now.</p>
+    <div class="note">Throughout the study, you'll occasionally hear the spoken word <em>"pause"</em>. This is the probe. When you hear it, use the arrow keys to report where your attention was in the moment <strong>just</strong> before the probe. The next screen explains this.</div>
     <div class="row"><button class="btn primary" id="next">Next</button></div>
   `);
   el("next").onclick = screenProbeInstructions;
 }
 
 function screenProbeInstructions(){
-STATE.screen = "probeInfo";
-show(` <p class="eyebrow">the probe</p> <h1>Reporting your attention</h1>
-<p>At random points, you'll hear the spoken word <em>"pause"</em>. This is the experience-sampling probe. When it happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
-<h2>The responses</h2>
-<ul>
-  <li><strong>On task</strong> — your mind was focusing on performing the task itself (for example, listening to each sound so you can respond quickly to the target, or feeling the end of your breath cycle so you can report it precisely). </li>
-  <li><strong>Off task, on the other thing</strong> - your mind was on specifically the other task's activity: your breath during the sound task, or the beeps during the breath task.</li>
-  <li><strong>Off task</strong> — your mind was on something task-unrelated (unrelated to both the breath and sounds tasks).</li>
-</ul>
-<p>What matters is your attention <strong>immediately before</strong> the probe — not whether your mind wandered at some earlier point since the last probe.</p>
-<div class="note"><strong>Example 1 — answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, tap <strong>On task</strong>.</div>
-<div class="note"><strong>Example 2 — answer Off task:</strong> You hear the probe and realize that just before it, while you were still responding to the target tones, you were mostly deciding where to eat dinner later. Since your attention was on something unrelated just before the probe, tap <strong>Off task</strong>.</div>
-<p class="small dim">During eyes-closed parts, keep your eyes shut and answer from memory: top = off task, middle = off task on the other activity, bottom = on task. During eyes-open parts, keep your eyes on the fixation point.</p>
-<p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer — whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
-<div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
-`);
-el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
+  STATE.screen = "probeInfo";
+  show(`
+    <p class="eyebrow">the probe</p>
+    <h1>Reporting your attention</h1>
+    <p>At random points, you'll hear the spoken word <em>"pause"</em>. When this happens, report where your attention was in the moment <strong>just before</strong> the probe.</p>
+
+    <h2>The responses</h2>
+    <ul>
+      <li><strong>On task:</strong> your mind was focused on the task itself, such as listening to the beeps so you can respond to targets, or feeling your breath so you can report each exhale precisely.</li>
+      <li><strong>Off task, on the other thing:</strong> your mind had drifted specifically to the other study activity, meaning your breath during the sound task, or the beeps during the breath task.</li>
+      <li><strong>Off task:</strong> your mind was on something unrelated to both study tasks, such as a thought, memory, plan, or something in the room.</li>
+    </ul>
+
+    <p>What matters is your attention <strong>immediately before</strong> the probe, not whether your mind wandered earlier since the last probe.</p>
+
+    <div class="note"><strong>Example 1, answer On task:</strong> After the previous probe, you resumed the sound task, briefly caught yourself thinking about a TV show, then returned to focusing on the beeps. If the probe happened after you had already returned to the task, press <span class="key">↓</span> for <strong>On task</strong>.</div>
+
+    <div class="note"><strong>Example 2, answer Off task:</strong> You hear the probe and realize that just before it, while you were still responding to target tones, you were mostly deciding where to eat dinner later. Since your attention was on something unrelated just before the probe, press <span class="key">↑</span> for <strong>Off task</strong>.</div>
+
+    <p class="small dim">During eyes-closed parts, keep your eyes shut and answer from memory: <span class="key">↓</span> on task, <span class="key">↑</span> off task, and <span class="key">←</span>/<span class="key">→</span> off task on the other activity. During eyes-open parts, keep your eyes on the fixation point.</p>
+
+    <p>We consider these attentional fluctuations to be a fundamental and natural part of human cognition, and we're interested in capturing your experience as it naturally unfolds. There is no right or wrong answer. Whether your mind stays on task or drifts, both experiences are valuable. Please respond honestly based on your experience just before the probe.</p>
+
+    <div class="row"><button class="btn primary" id="next">${CONFIG.SHORT_PRACTICE ? "Try a short practice" : "I'm ready to begin"}</button></div>
+  `);
+  el("next").onclick = CONFIG.SHORT_PRACTICE ? screenPracticeIntro : firstConditionGate;
 }
 
   
+
 
 /* ---------------------- PRACTICE -------------------------------- */
 function screenPracticeIntro(){
   STATE.screen = "practiceIntro";
   show(`
     <p class="eyebrow">practice · 1 of 2</p>
-    <h1>Practice the listening task</h1>
+    <h1>Practice the sound task</h1>
     <p>You'll hear a stream of beeps. Most are the <strong>standard</strong> beep (lower). Once in a while a <strong>target</strong> beep plays (higher). Press <span class="key">space</span> as quickly as you can whenever you hear a <em>target</em>. Do nothing for the standards.</p>
-    <p class="small dim">This practice is about 15 seconds. Keep your hand on the spacebar.</p>
+    <p>This practice runs for about <strong>30 seconds</strong> and ends with a real probe. When you hear "pause," answer with the arrow keys before continuing.</p>
+    <p class="small dim">Keep your hand near the spacebar.</p>
     <div class="row"><button class="btn primary" id="go">Start practice</button></div>
   `);
-  el("go").onclick = ()=> runListeningPractice();
+  el("go").onclick = ()=> runPractice("sound", soundPracticeResult);
 }
 
-function runListeningPractice(){
-  STATE.screen = "practiceRun"; STATE.runState = "running"; STATE.task = "sound";
-  // short fixed-ish practice sequence: ~21 tones with 3 targets, spaced
-  const seq = []; for (let i=0;i<21;i++) seq.push(STANDARD);
-  [4, 11, 17].forEach(i => seq[i] = DEVIANT);
-  setStage("open", `<div class="fix">+</div><div class="stagehint">press space on the higher beep</div>`);
-  let idx = 0, hits = 0, targets = 0, fa = 0;
-  let curOnsetPerf = -1, curIsTarget = false, curResponded = false;
-  const t0 = actx.currentTime + 0.4;
-  const onsets = seq.map((_, i) => t0 + i * SOA);
-  onsets.forEach((when, i) => {
-    const isT = seq[i] === DEVIANT;
-    scheduleTone(isT ? CONFIG.deviantHz : CONFIG.standardHz, CONFIG.stimDurationSecs, when, CONFIG.toneGain);
-  });
-  PRACTICE.onKey = (e) => {
-    if (e.code === "Space"){
-      e.preventDefault();
-      const t = performance.now();
-      // find last onset <= t
-      let k = -1; for (let i=0;i<onsets.length;i++){ if (audioToPerf(onsets[i]) <= t) k = i; }
-      if (k >= 0){
-        const wasT = seq[k] === DEVIANT;
-        if (wasT){ hits++; } else { fa++; }
-      }
-    }
-  };
-  targets = seq.filter(x => x === DEVIANT).length;
-  const endAt = t0 + seq.length * SOA + 0.2;
-  practiceWatch(endAt, () => {
-    PRACTICE.onKey = null; STATE.runState = "idle"; setStage("hide");
-    show(`
-      <p class="eyebrow">practice · 1 of 2</p>
-      <h1>Nice.</h1>
-      <p>You caught <strong>${hits} of ${targets}</strong> target beeps${fa>0?`, with ${fa} press${fa>1?"es":""} on a standard`:""}. In the real task, just aim to press quickly on the higher beep and let the standards go by.</p>
-      <div class="row">
-        <button class="btn ghost" id="again">Repeat</button>
-        <button class="btn primary" id="next">Continue to breath practice</button>
-      </div>
-    `);
-    el("again").onclick = runListeningPractice;
-    el("next").onclick = screenBreathPracticeIntro;
-  });
+function soundPracticeResult(stats){
+  show(`
+    <p class="eyebrow">practice · 1 of 2</p>
+    <h1>Nice.</h1>
+    <p>You caught <strong>${stats.hits} of ${stats.targets}</strong> target beeps${stats.fa>0?`, with ${stats.fa} press${stats.fa>1?"es":""} on a standard`:""}, and you answered the probe with <strong>${esc(stats.probeText||"no response")}</strong>. In the real task, aim to press quickly on the higher beep and let the standards go by.</p>
+    <div class="row">
+      <button class="btn ghost" id="again">Repeat</button>
+      <button class="btn primary" id="next">Continue to breath practice</button>
+    </div>
+  `);
+  el("again").onclick = ()=> runPractice("sound", soundPracticeResult);
+  el("next").onclick = screenBreathPracticeIntro;
 }
 
 function screenBreathPracticeIntro(){
@@ -451,42 +497,96 @@ function screenBreathPracticeIntro(){
   show(`
     <p class="eyebrow">practice · 2 of 2</p>
     <h1>Practice the breath task</h1>
-    <p>Breathe naturally. Each time you finish breathing <em>out</em>, press <span class="key">space</span> once — one press per exhale. The beeps keep playing but are irrelevant to the breath task.</p>
-    <p class="small dim">This practice is about 18 seconds.</p>
+    <p>Breathe naturally. Each time you finish breathing <em>out</em>, press <span class="key">space</span> once. Use one press per exhale. The beeps keep playing but are irrelevant to the breath task.</p>
+    <p>This practice runs for about <strong>30 seconds</strong> and also ends with a probe. Answer it with the arrow keys before continuing.</p>
     <div class="row"><button class="btn primary" id="go">Start practice</button></div>
   `);
-  el("go").onclick = ()=> runBreathPractice();
+  el("go").onclick = ()=> runPractice("breath", breathPracticeResult);
 }
 
-function runBreathPractice(){
-  STATE.screen = "practiceRun"; STATE.runState = "running"; STATE.task = "breath";
-  setStage("open", `<div class="fix">+</div><div class="stagehint">press space on each exhale</div>`);
-  let presses = 0;
-  const t0 = actx.currentTime + 0.4, dur = 18;
-  const n = Math.floor(dur / SOA);
-  for (let i=0;i<n;i++){ scheduleTone(CONFIG.standardHz, CONFIG.stimDurationSecs, t0 + i*SOA, CONFIG.toneGain); }
-  PRACTICE.onKey = (e) => { if (e.code === "Space"){ e.preventDefault(); presses++; } };
-  practiceWatch(actx.currentTime + dur, () => {
-    PRACTICE.onKey = null; STATE.runState = "idle"; setStage("hide");
-    show(`
-      <p class="eyebrow">practice · 2 of 2</p>
-      <p>You marked <strong>${presses} breath${presses!==1?"s":""}</strong>. Ensure you're breahting naturally and pressing the space bar precisely at the end of each exhale.</p>
-      <p class="dim small">Last thing: remember the probe. When the beeps pause and you hear the probe, report your attention with <span class="key">↓</span> on task · <span class="key">↑</span> off task · <span class="key">←</span>/<span class="key">→</span> off task, on the other thing.</p>
-      <div class="row">
-        <button class="btn ghost" id="again">Repeat</button>
-        <button class="btn primary" id="next">I'm ready to begin the study</button>
-      </div>
-    `);
-    el("again").onclick = runBreathPractice;
-    el("next").onclick = firstConditionGate;
-  });
+function breathPracticeResult(stats){
+  show(`
+    <p class="eyebrow">practice · 2 of 2</p>
+    <h1>You've got it.</h1>
+    <p>You marked <strong>${stats.breaths} breath${stats.breaths!==1?"s":""}</strong> and answered the probe with <strong>${esc(stats.probeText||"no response")}</strong>. Breathe naturally and press right at the end of each exhale.</p>
+    <p class="dim small">Remember: when you hear "pause," report your attention with <span class="key">↓</span> on task, <span class="key">↑</span> off task, or <span class="key">←</span>/<span class="key">→</span> off task on the other thing.</p>
+    <div class="row">
+      <button class="btn ghost" id="again">Repeat</button>
+      <button class="btn primary" id="next">I'm ready to begin the study</button>
+    </div>
+  `);
+  el("again").onclick = ()=> runPractice("breath", breathPracticeResult);
+  el("next").onclick = firstConditionGate;
 }
 
-const PRACTICE = { onKey: null };
-function practiceWatch(endAudioTime, done){
-  const iv = setInterval(()=>{
-    if (actx.currentTime >= endAudioTime){ clearInterval(iv); done(); }
-  }, 50);
+const PRACTICE = { onKey: null, mode: null };
+
+function runPractice(task, onDone){
+  STATE.screen = "practiceRun"; STATE.runState = "running"; STATE.task = task;
+  const isSound = task === "sound";
+  setStage("open", `<div class="fix">+</div><div class="stagehint">${isSound ? "press space on the higher beep" : "press space at the end of each exhale"}</div>`);
+  const nT = Math.max(8, Math.floor(CONFIG.PRACTICE_TONE_SECS / SOA));
+  const seq = isSound ? buildPracticeSeq(nT) : new Array(nT).fill(STANDARD);
+  const t0 = actx.currentTime + 0.5;
+  const onsets = [];
+  for (let i=0;i<nT;i++){
+    const isTarget = seq[i] === DEVIANT;
+    const when = t0 + i*SOA;
+    scheduleTone(isTarget ? CONFIG.deviantHz : CONFIG.standardHz, CONFIG.stimDurationSecs, when, CONFIG.toneGain);
+    onsets.push({when, isTarget});
+  }
+
+  const stats = { hits:0, fa:0, targets: seq.filter(x=>x===DEVIANT).length, breaths:0, probeText:null };
+  PRACTICE.mode = "task";
+  PRACTICE.onKey = (e)=>{
+    if (PRACTICE.mode === "task" && e.code === "Space"){
+      e.preventDefault();
+      const t = performance.now();
+      if (isSound){
+        let k = -1;
+        for (let i=0;i<onsets.length;i++){ if (audioToPerf(onsets[i].when) <= t) k = i; }
+        if (k >= 0){ if (onsets[k].isTarget) stats.hits++; else stats.fa++; }
+      } else {
+        stats.breaths++;
+      }
+    } else if (PRACTICE.mode === "probe"){
+      let code = null, txt = null;
+      if (e.code === "ArrowDown"){ code = 0; txt = "On task"; }
+      else if (e.code === "ArrowUp"){ code = 1; txt = "Off task"; }
+      else if (e.code === "ArrowLeft" || e.code === "ArrowRight"){ code = 2; txt = "Off task (other thing)"; }
+      if (code !== null){
+        e.preventDefault();
+        stats.probeText = txt;
+        PRACTICE.mode = "done";
+        endPractice();
+      }
+    }
+  };
+
+  const lastOnset = t0 + (nT-1)*SOA;
+  const watcher = setInterval(()=>{
+    if (PRACTICE.mode !== "task"){ clearInterval(watcher); return; }
+    if (actx.currentTime >= lastOnset + SOA){
+      clearInterval(watcher);
+      PRACTICE.mode = "probe";
+      probeCue(actx.currentTime + 0.05);
+      setStage("open", `
+        <div class="stagetext">Where was your attention, just before the probe?</div>
+        <div class="stagehint" style="margin-top:26px">
+          <span class="key">↓</span> on task &nbsp;·&nbsp;
+          <span class="key">↑</span> off task &nbsp;·&nbsp;
+          <span class="key">←</span>/<span class="key">→</span> off task, on the other thing
+        </div>`);
+    }
+  }, 40);
+
+  function endPractice(){
+    PRACTICE.onKey = null;
+    PRACTICE.mode = null;
+    STATE.runState = "idle";
+    setStage("hide");
+    onDone(stats);
+  }
 }
 
 /* ---------------------- CONDITION SEQUENCE ---------------------- */
@@ -501,21 +601,25 @@ function nextConditionIntro(){
   const isClosed = def.eye === "EC";
   const taskBlock = isSound
     ? `<ul>
-         <li>The task is to listen for the <strong>higher target beep</strong> among the lower standards, and press <span class="key">space</span> as QUICKLY as you can on each <strong>target</strong>. Do not respond to the standards. When on task, your attention is focused on listening to each sound as it arises and responding as fast as possible to targets and withholding responses from standards. </li>
+         <li>The task is to listen for the <strong>higher target beep</strong> among the lower standards, and press <span class="key">space</span> as quickly as you can on each <strong>target</strong>. Do not respond to the standards. When on task, your attention is focused on each sound as it arises: responding quickly to targets and withholding responses to standards.</li>
        </ul>`
     : `<ul>
-         <li>The task is to breathe naturally and press <span class="key">space</span> once at the end of each <strong>exhale</strong> before your inhale. When on task, your attention is focused on the sensations of your breath, remaining aware of each inhale and exhale, and being precise with the button press. Imagine the experimenters are additionally physiologically tracking your objective inhale and exhale timing for comparison. </li>
-         <li>The beeps will continue playing but they are irrelevant for this task.</li>
+         <li>The task is to breathe naturally and press <span class="key">space</span> once at the end of each <strong>exhale</strong>, before your inhale. When on task, your attention is focused on the sensations of your breath, staying aware of each inhale and exhale, and being precise with the button press. Imagine the experimenters are additionally tracking your objective inhale and exhale timing for comparison.</li>
+         <li>The beeps will continue playing, but they are irrelevant for this task.</li>
        </ul>`;
   const eyeBlock = isClosed
-    ? `<div class="note"><strong>Eyes closed.</strong> Prepare by placing your left pointer finger on the space bar and your right between the up and down arrows to answer the probes. When you press start, you'll hear a 5s countdown-- close your eyes and keep them shut until the <em>chime</em> at the end of the block. Answer the probes by feel, using the arrow keys.</div>`
+    ? `<div class="note"><strong>Eyes closed.</strong> Prepare by placing your left pointer finger on the spacebar and your right hand between the up and down arrows to answer probes. When you press start, you'll hear a 5-second countdown. Close your eyes and keep them shut until the <em>chime</em> at the end of the block. Answer probes by feel, using the arrow keys.</div>`
     : `<div class="note"><strong>Eyes open.</strong> Keep your gaze relaxed on the <strong>+</strong> in the centre of the screen.</div>`;
+  const ctrlLine = CONFIG.ALLOW_PAUSE_QUIT
+    ? `<p class="small dim">If needed, press <span class="key">P</span> to pause. Press <span class="key">Esc</span> to stop early, then confirm save and quit.</p>`
+    : "";
   show(`
     <p class="progress">Part ${condIndex+1} of ${SESSION.order.length}</p>
-    <h1>${isSound ? "Sound task" : "breath task"} — ${isClosed ? "eyes closed" : "eyes open"}</h1>
+    <h1>${isSound ? "Sound task" : "Breath task"}: ${isClosed ? "eyes closed" : "eyes open"}</h1>
     ${taskBlock}
     ${eyeBlock}
-    <p class="small dim">The probe is the same as before: <span class="key">↓</span> on task · <span class="key">↑</span> off task · <span class="key">←</span>/<span class="key">→</span> off task, on the other activity. Roughly ${esc(CONFIG.blockMinutes)} minutes.</p>
+    <p class="small dim">The probe is the same as before: <span class="key">↓</span> on task, <span class="key">↑</span> off task, and <span class="key">←</span>/<span class="key">→</span> off task on the other activity. Roughly ${esc(CONFIG.blockMinutes)} minutes.</p>
+    ${ctrlLine}
     <div class="row"><button class="btn primary" id="ready">Start this part</button></div>
   `);
   el("ready").onclick = ()=> countdownThenBlock(def);
@@ -578,7 +682,8 @@ function runBlock(def, blockStartAudio){
     nStandards: 0, nDeviants: 0,
     lastBreathPerf: NaN,
     tabBlur: 0,
-    ended: false,
+    ended: false, aborted: false,
+    pauseCount: 0, pausedMs: 0, _pauseStart: null,
     KSS: NaN, eye_report: NaN, task_report: NaN,
   };
 
@@ -673,8 +778,7 @@ function finalizeActiveTrial(){
 function insertProbe(){
   STATE.runState = "probe";
   const when = BLK.nextToneTime;            // where the next tone would have been
-  scheduleProbeCue(when);
-  const probeOnPerf = audioToPerf(when);
+  const probeOnPerf = probeCue(when);
   const pr = {
     probe: BLK.Probe.length + 1,
     plannedGapStim: BLK.nextProbeGapStim,
@@ -689,7 +793,6 @@ function insertProbe(){
   BLK.Probe.push(pr);
   BLK.activeProbe = pr;
 
-  // eyes-open: show the prompt on screen; eyes-closed: dark + spoken reminder
   if (!BLK.isClosed){
     setStage("open", `
       <div class="stagetext">Where was your attention, just before the probe?</div>
@@ -700,7 +803,6 @@ function insertProbe(){
       </div>`);
   } else {
     setStage("dark", "");
-    speak("Where was your attention? Down for on task. Up for off task. Left or right for the other activity.");
   }
 }
 
@@ -741,6 +843,90 @@ function endBlock(){
   setTimeout(surveyKSS, 700);
 }
 
+
+/* ===================== PAUSE / QUIT ============================== */
+function pauseBlock(kind){
+  if (!BLK || BLK.ended) return;
+  if (STATE.runState === "paused"){ if (kind === "quit") openQuitMenu(); return; }
+  STATE.prePauseRun = STATE.runState;
+  STATE.runState = "paused";
+  STATE.pauseKind = kind;
+  BLK._pauseStart = performance.now();
+  try{ actx.suspend(); }catch(e){}
+  try{ if (window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+
+  if (kind === "quit") renderQuitOverlay();
+  else renderPauseOverlay();
+
+  if (BLK.isClosed) speakNow(kind === "quit" ? "Stop early? Open your eyes to choose." : "Paused. Press P to resume.");
+}
+
+function renderPauseOverlay(){
+  showOverlay(`
+    <h2>Paused</h2>
+    <p class="small dim">Your place is held. Press resume when you're ready.</p>
+    <div class="row" style="justify-content:center"><button class="btn primary" id="ovResume">Resume</button></div>
+    <p class="small dim" style="margin-top:12px">Press <span class="key">P</span> to resume. Press <span class="key">Esc</span> to stop early.</p>
+  `);
+  el("ovResume").onclick = resumeBlock;
+}
+
+function renderQuitOverlay(){
+  showOverlay(`
+    <h2>Stop early?</h2>
+    <p class="small dim">Your progress so far will still be saved and sent to the researcher. You can also resume where you left off.</p>
+    <div class="row" style="justify-content:center;margin-top:6px">
+      <button class="btn" id="ovResume2">Resume</button>
+      <button class="btn primary" id="ovQuit">Save and quit</button>
+    </div>
+  `);
+  el("ovResume2").onclick = resumeBlock;
+  el("ovQuit").onclick = quitNow;
+}
+
+function openQuitMenu(){
+  if (!BLK || BLK.ended) return;
+  if (STATE.runState !== "paused"){ pauseBlock("quit"); return; }
+  STATE.pauseKind = "quit";
+  renderQuitOverlay();
+}
+
+function resumeBlock(){
+  if (STATE.runState !== "paused") return;
+  hideOverlay();
+  try{ actx.resume(); }catch(e){}
+  if (BLK && BLK._pauseStart != null){
+    BLK.pausedMs += (performance.now() - BLK._pauseStart);
+    BLK.pauseCount += 1;
+    BLK._pauseStart = null;
+  }
+  if (CONFIG.REQUIRE_FULLSCREEN && !document.fullscreenElement) requestFS();
+  STATE.runState = STATE.prePauseRun || "running";
+  STATE.pauseKind = null;
+}
+
+function quitNow(){
+  hideOverlay();
+  try{ actx.resume(); }catch(e){}
+  if (BLK && BLK._pauseStart != null){
+    BLK.pausedMs += (performance.now() - BLK._pauseStart);
+    BLK.pauseCount += 1;
+    BLK._pauseStart = null;
+  }
+  if (BLK && !BLK.ended){
+    finalizeActiveTrial();
+    BLK.ended = true;
+    if (schedTimer){ clearInterval(schedTimer); schedTimer = null; }
+    BLK.blockEndPerf = performance.now();
+    BLK.blockDuration = (BLK.blockEndPerf - BLK.blockStartPerf)/1000;
+    BLK.aborted = true;
+    flattenBlockToRows();
+  }
+  SESSION.endedEarly = true;
+  STATE.runState = "idle";
+  finish();
+}
+
 /* ===================== POST-BLOCK SURVEY =========================== */
 function surveyKSS(){
   STATE.screen = "kss"; setStage("hide");
@@ -761,7 +947,7 @@ function surveyKSS(){
   for (let i=1;i<=9;i++){
     const b = document.createElement("button");
     b.className = "btn"; b.textContent = i;
-    b.onmouseenter = ()=> el("kssLabels").textContent = i + " — " + labels[i-1];
+    b.onmouseenter = ()=> el("kssLabels").textContent = i + "  -  " + labels[i-1];
     b.onfocus = b.onmouseenter;
     b.onclick = ()=>{ BLK.KSS = i; surveyEye(); };
     wrap.appendChild(b);
@@ -829,7 +1015,8 @@ const HEADERS = [
   "KSS","eye_report","task_report","block_duration","n_tones","n_standards","n_deviants",
   "n_probes","n_breaths","n_button_presses","tab_blur_count",
   "session_start","session_end","total_duration","user_agent","screen_w","screen_h",
-  "audio_out_latency_ms","audio_sample_rate","order","conditions_run","soa_sec","probe_gap_min_s","probe_gap_max_s"
+  "audio_out_latency_ms","audio_sample_rate","order","conditions_run","soa_sec","probe_gap_min_s","probe_gap_max_s",
+  "block_status","pause_count","paused_ms","ended_early"
 ];
 
 function commonCols(){
@@ -884,6 +1071,9 @@ function flattenBlockToRows(){
     block_duration:fmt(BLK.blockDuration), n_tones:BLK.T.length, n_standards:BLK.nStandards,
     n_deviants:BLK.nDeviants, n_probes:BLK.Probe.length, n_breaths:BLK.Breath.length,
     n_button_presses:BLK.Button.length, tab_blur_count:BLK.tabBlur,
+    block_status: BLK.aborted ? "aborted" : "complete",
+    pause_count: BLK.pauseCount || 0,
+    paused_ms: Math.round(BLK.pausedMs || 0),
   }));
 }
 
@@ -898,6 +1088,7 @@ function buildSessionMetaRow(){
     audio_out_latency_ms: (outLatSec*1000).toFixed(1), audio_sample_rate: actx ? actx.sampleRate : "",
     order: SESSION.order.join("|"), conditions_run: SESSION.order.length,
     soa_sec: SOA.toFixed(6), probe_gap_min_s: CONFIG.PROBE_GAP_MIN, probe_gap_max_s: CONFIG.PROBE_GAP_MAX,
+    ended_early: SESSION.endedEarly ? 1 : 0,
   };
 }
 
@@ -957,25 +1148,28 @@ function submitData(){
 
 /* ===================== END SCREENS ================================= */
 function finish(){
-  STATE.screen = "submitting"; setStage("hide");
+  STATE.screen = "submitting"; setStage("hide"); hideOverlay();
   exitFS();
   show(`
     <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
-    <h1>That's everything — thank you.</h1>
-    <p class="dim">Sending your responses to the researcher…</p>
+    <h1>That's everything. Thank you.</h1>
+    <p class="dim">Sending your responses to the researcher...</p>
     <div class="row"><button class="btn ghost" id="dl" style="opacity:.7">Save a copy for myself</button></div>
   `);
   el("dl").onclick = downloadBackup;
   submitData();
 }
 
+function allConditionsDone(){ return !SESSION.endedEarly && condIndex >= SESSION.order.length; }
+
 function finishScreen(ok, reason){
   if (ok){
+    if (allConditionsDone()){ renderSummaryScreen(true); return; }
     show(`
       <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
-      <h1>All done. Your responses were submitted.</h1>
-      <p>Thank you for your time and attention — it genuinely helps. You can close this tab now.</p>
-      <p class="small dim">If you'd like a copy of your own data, you can save one below. You don't need to send it; it's already been received.</p>
+      <h1>Thanks. Your responses were saved.</h1>
+      <p>You stopped early, and everything you completed has been submitted to the researcher. You can close this tab now.</p>
+      <p class="small dim">You can also save a copy for yourself below.</p>
       <div class="row"><button class="btn ghost" id="dl">Save a copy</button></div>
     `);
     el("dl").onclick = downloadBackup;
@@ -985,22 +1179,161 @@ function finishScreen(ok, reason){
       : "Your responses couldn't be sent automatically (the connection failed).";
     show(`
       <p class="eyebrow">${esc(CONFIG.STUDY_NAME)}</p>
-      <h1>Almost there — one quick manual step</h1>
+      <h1>Almost there: one quick manual step</h1>
       <p>${why} Your data is safe. Please click the button below to download the file, then email it to <strong>${esc(CONFIG.CONTACT_EMAIL)}</strong>.</p>
       <div class="row"><button class="btn primary" id="dl">Download my data</button></div>
-      <p class="small dim" style="margin-top:14px">Thank you — this is the only manual step, and it takes a moment.</p>
+      <p class="small dim" style="margin-top:14px">Thank you. This is the only manual step.</p>
     `);
     el("dl").onclick = downloadBackup;
-    // auto-trigger the download so nothing is lost even if they miss the button
     setTimeout(downloadBackup, 400);
   }
+}
+
+
+function mean(a){ return a.reduce((s,x)=>s+x,0)/a.length; }
+function pstd(a,m){ if (a.length<2) return NaN; const mm=(m==null?mean(a):m); return Math.sqrt(a.reduce((s,x)=>s+(x-mm)*(x-mm),0)/a.length); }
+function statOf(a){ if (!a.length) return {n:0}; const m=mean(a), sd=pstd(a,m); return {n:a.length, mean:m, sd, cv:(m?sd/m:NaN)}; }
+function halfTrend(events){
+  if (events.length < 6) return null;
+  const s = events.slice().sort((a,b)=>a.t-b.t);
+  const mid = Math.floor(s.length/2);
+  const early = mean(s.slice(0,mid).map(e=>e.v));
+  const late  = mean(s.slice(mid).map(e=>e.v));
+  const rel = (late - early)/(Math.abs(early)||1);
+  let dir = "steady"; if (rel > 0.10) dir="up"; else if (rel < -0.10) dir="down";
+  return { early, late, dir, rel };
+}
+function computeSummary(){
+  const rows = SESSION.rows, conds = [];
+  SESSION.order.forEach((cond)=>{
+    const def = COND_DEFS[cond], isSound = def.task === "sound";
+    const probes = rows.filter(r=> r.row_type === "probe" && r.condition === cond && r.mind_wandering !== "" && r.mind_wandering != null)
+                       .map(r=>({ t:+r.probeOn_block, mw:+r.mind_wandering }))
+                       .filter(p=> !isNaN(p.t) && !isNaN(p.mw))
+                       .sort((a,b)=> a.t-b.t);
+    const rec = { cond, def, isSound, nProbes: probes.length };
+    if (!probes.length){ conds.push(rec); return; }
+    rec.mwRate = probes.filter(p=>p.mw > 0).length / probes.length;
+    let events;
+    if (isSound){
+      events = rows.filter(r=> r.row_type === "trial" && r.condition === cond && r.ResponseType === "hit" && r.RT !== "" && r.RT != null)
+                   .map(r=>({ t:+r.stimOn_block, v:+r.RT }));
+    } else {
+      events = rows.filter(r=> r.row_type === "breath" && r.condition === cond && r.since_last_press !== "" && r.since_last_press != null)
+                   .map(r=>({ t:+r.press_block, v:+r.since_last_press }));
+    }
+    events = events.filter(e=> !isNaN(e.t) && !isNaN(e.v));
+    rec.nEvents = events.length;
+    const labelOf = (t)=>{ let p = probes.find(p=> p.t >= t); if (!p) p = probes[probes.length-1]; return p.mw > 0 ? "off" : "on"; };
+    rec.on  = statOf(events.filter(e=> labelOf(e.t) === "on").map(e=>e.v));
+    rec.off = statOf(events.filter(e=> labelOf(e.t) === "off").map(e=>e.v));
+    rec.behTrend = halfTrend(events);
+    rec.mwTrend  = halfTrend(probes.map(p=>({t:p.t, v: p.mw > 0 ? 1 : 0})));
+    conds.push(rec);
+  });
+  return conds;
+}
+function onVsOffLine(rec){
+  const on = rec.on, off = rec.off;
+  if (rec.isSound){
+    if (!on || !on.n || on.n < 3) return "Not enough on-task targets to summarize reaction time.";
+    let s = `On-task RT averaged <strong>${Math.round(on.mean*1000)} ms</strong> (variability ${on.cv.toFixed(2)})`;
+    if (off && off.n >= 3) s += `; off-task RT averaged <strong>${Math.round(off.mean*1000)} ms</strong> (${off.cv.toFixed(2)}).`;
+    else s += `. Too few off-task target hits to compare.`;
+    return s;
+  } else {
+    if (!on || !on.n || on.n < 3) return "Not enough on-task breaths to summarize timing.";
+    let s = `On-task breaths came every <strong>${on.mean.toFixed(1)} s</strong> (variability ${on.cv.toFixed(2)})`;
+    if (off && off.n >= 3) s += `; off-task breaths came every <strong>${off.mean.toFixed(1)} s</strong> (${off.cv.toFixed(2)}).`;
+    else s += `. Too few off-task moments to compare.`;
+    return s;
+  }
+}
+function trendLine(rec){
+  const parts = [];
+  if (rec.mwTrend){
+    const d = rec.mwTrend.dir;
+    parts.push(d === "up" ? "mind wandering increased" : d === "down" ? "mind wandering decreased" : "mind wandering stayed fairly steady");
+  }
+  if (rec.behTrend){
+    const d = rec.behTrend.dir;
+    if (rec.isSound) parts.push(d === "up" ? "reaction times slowed" : d === "down" ? "reaction times quickened" : "reaction times stayed steady");
+    else parts.push(d === "up" ? "breaths lengthened" : d === "down" ? "breaths shortened" : "breath timing stayed steady");
+  }
+  if (!parts.length) return "Not enough data to detect a within-block trend.";
+  return parts.join("; ") + ".";
+}
+function renderSummaryScreen(submitted){
+  STATE.screen = "summary";
+  const S = computeSummary();
+  let totalProbes = 0, totalMW = 0, rtVals = [];
+  S.forEach(rec=>{
+    totalProbes += rec.nProbes || 0;
+    if (rec.nProbes && rec.mwRate != null) totalMW += Math.round(rec.mwRate * rec.nProbes);
+  });
+  SESSION.rows.forEach(r=>{
+    if (r.row_type === "trial" && r.ResponseType === "hit" && r.RT !== "" && r.RT != null){
+      const v = +r.RT; if (!isNaN(v)) rtVals.push(v);
+    }
+  });
+  const overallMW = totalProbes ? Math.round((totalMW/totalProbes)*100) : null;
+  const overallRT = rtVals.length ? Math.round(mean(rtVals)*1000) : null;
+
+  let html = `
+    <p class="eyebrow">${esc(CONFIG.STUDY_NAME)} · your session at a glance</p>
+    <h1>All done. Here's a quick snapshot.</h1>
+    ${submitted ? `<p class="small ok">Your responses were submitted. Thank you.</p>` : ``}
+    <p class="small dim">This is an informal summary of this session, not a clinical measure.</p>
+    <div class="sumrow">
+      <div class="sumhead">Overall</div>
+      <div class="sumline">Mind wandering: <strong>${overallMW==null ? "not enough probes" : overallMW + "%"}</strong>${totalProbes ? ` across ${totalProbes} probes` : ""}.</div>
+      <div class="sumline">Sound-task RT: <strong>${overallRT==null ? "not enough hits" : overallRT + " ms"}</strong>${rtVals.length ? ` across ${rtVals.length} target hits` : ""}.</div>
+    </div>
+  `;
+  S.forEach(rec=>{
+    const taskLabel = rec.isSound ? "Sound task" : "Breath task";
+    html += `<div class="sumrow"><div class="sumhead">${taskLabel}<span class="tag">${esc(rec.def.eyeName)}</span></div>`;
+    if (!rec.nProbes){ html += `<div class="sumline dim">Not enough probes in this block to summarize.</div></div>`; return; }
+    const pct = Math.round(rec.mwRate*100);
+    html += `<div class="mwbar"><span style="width:${pct}%"></span></div>`;
+    html += `<div class="sumline">Mind wandered on <strong>${pct}%</strong> of probes.</div>`;
+    html += `<div class="sumline">${onVsOffLine(rec)}</div>`;
+    html += `<div class="sumline dim">${trendLine(rec)}</div>`;
+    html += `</div>`;
+  });
+  html += `
+    <div class="row" style="margin-top:20px"><button class="btn ghost" id="dl">Save a copy of my data</button></div>
+    <p class="small dim" style="margin-top:10px">You can close this tab now.</p>
+  `;
+  show(html);
+  el("dl").onclick = downloadBackup;
 }
 
 /* ===================== INPUT ROUTING =============================== */
 document.addEventListener("keydown", (e)=>{
   // practice has its own handler
   if (PRACTICE.onKey){ PRACTICE.onKey(e); return; }
+
   if (STATE.screen !== "block") return;
+
+  if (CONFIG.ALLOW_PAUSE_QUIT){
+    if (e.code === "KeyP"){
+      e.preventDefault();
+      if (STATE.runState === "paused"){
+        if (STATE.pauseKind !== "quit") resumeBlock();
+      } else {
+        pauseBlock("pause");
+      }
+      return;
+    }
+    if (e.code === "Escape"){
+      e.preventDefault();
+      openQuitMenu();
+      return;
+    }
+  }
+
+  if (STATE.runState === "paused") return;
 
   // probe answering (any task)
   if (STATE.runState === "probe"){
